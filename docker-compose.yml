@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vega-repos-postgres
+    environment:
+      POSTGRES_DB: vega_repos_db
+      POSTGRES_USER: vega
+      POSTGRES_PASSWORD: vega
+    ports:
+      - "5432:5432"
+    volumes:
+      - vega_repos_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vega -d vega_repos_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  vega_repos_pgdata:
