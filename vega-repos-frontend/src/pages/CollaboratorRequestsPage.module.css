@@ -1,0 +1,167 @@
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.container h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+}
+
+.subtitle {
+  font-size: 0.95rem;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-8);
+}
+
+.alert {
+  padding: var(--space-3) var(--space-4);
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  margin-bottom: var(--space-6);
+}
+
+.loading {
+  padding: var(--space-12, 3rem);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+/* ── Block (section card) ── */
+.block {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+.blockHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1);
+  font-size: 1rem;
+}
+
+.count {
+  padding: 0.1rem 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--accent-muted);
+  color: var(--accent);
+  border-radius: 10px;
+  min-width: 22px;
+  text-align: center;
+}
+
+.blockHint {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-4);
+}
+
+.empty {
+  color: var(--text-tertiary);
+  font-size: 0.9rem;
+  padding: var(--space-2) 0;
+}
+
+/* ── List / Items ── */
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.item:first-child {
+  padding-top: 0;
+}
+
+.itemInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.itemTitle {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.repoLink {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.repoLink:hover {
+  text-decoration: underline;
+}
+
+.itemMsg {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.itemDate {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+/* ── Action Buttons ── */
+.itemActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.btnAccept,
+.btnReject {
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.btnAccept {
+  background: var(--success);
+  color: white;
+}
+
+.btnReject {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+}
+
+.btnAccept:hover {
+  opacity: 0.9;
+}
+
+.btnReject:hover {
+  color: var(--error);
+  border-color: var(--error);
+}

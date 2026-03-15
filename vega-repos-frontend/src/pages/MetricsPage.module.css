@@ -1,0 +1,201 @@
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.container h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+}
+
+.subtitle {
+  font-size: 0.95rem;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-8);
+}
+
+/* ── Section ── */
+.section {
+  margin-bottom: var(--space-10, 3rem);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.sectionHeader h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.badge {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--accent-muted);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+.sectionDesc {
+  font-size: 0.9rem;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-6);
+  line-height: 1.5;
+}
+
+/* ── Scope block (My / Global) ── */
+.scopeBlock {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  margin-bottom: var(--space-5);
+}
+
+.scopeBlock h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+  color: var(--text-secondary);
+}
+
+/* ── Stat Cards Row ── */
+.statsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.statCard {
+  flex: 1;
+  min-width: 100px;
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.statValue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.statLabel {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.accentBlue .statValue { color: var(--accent); }
+.accentGreen .statValue { color: var(--success); }
+.accentRed .statValue { color: var(--error); }
+.accentYellow .statValue { color: var(--warning, #f59e0b); }
+.accentPurple .statValue { color: #a855f7; }
+.accentCyan .statValue { color: #06b6d4; }
+.accentGray .statValue { color: var(--text-tertiary); }
+
+/* ── Metric Block ── */
+.metricBlock {
+  margin-bottom: var(--space-4);
+}
+
+.metricBlock h4 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ── Metric Row ── */
+.metricRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.metricRow:last-of-type {
+  border-bottom: none;
+}
+
+.metricInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.metricLabel {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.metricDesc {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  line-height: 1.3;
+}
+
+.metricValue {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  margin-left: var(--space-4);
+}
+
+/* ── Progress Bar ── */
+.progressBarBg {
+  height: 6px;
+  background: var(--bg-surface);
+  border-radius: 3px;
+  margin: var(--space-2) 0 var(--space-3) 0;
+  overflow: hidden;
+}
+
+.progressBarFill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+/* ── Loading / Error ── */
+.loading,
+.error {
+  padding: var(--space-12, 3rem);
+  text-align: center;
+}
+
+.error {
+  color: var(--error);
+}
+
+@media (max-width: 700px) {
+  .statsRow {
+    flex-direction: column;
+  }
+  .statCard {
+    min-width: auto;
+  }
+}

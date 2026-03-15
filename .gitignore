@@ -1,0 +1,33 @@
+# Genel
+.DS_Store
+.env
+.env.*
+.idea/
+.vscode/
+*.iml
+*.log
+logs/
+
+# Java / Spring Backend
+vega-repos-backend/target/
+vega-repos-backend/.classpath
+vega-repos-backend/.project
+vega-repos-backend/.settings/
+vega-repos-backend/.mvn/wrapper/maven-wrapper.jar
+
+# Node / Frontend
+vega-repos-frontend/node_modules/
+vega-repos-frontend/.next/
+vega-repos-frontend/dist/
+vega-repos-frontend/build/
+vega-repos-frontend/.turbo/
+vega-repos-frontend/.parcel-cache/
+vega-repos-frontend/yarn-error.log
+vega-repos-frontend/npm-debug.log*
+
+# Sistem / Çeşitli
+*.swp
+*.swo
+*.tmp
+*.bak
+*~

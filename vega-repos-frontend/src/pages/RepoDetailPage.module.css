@@ -1,0 +1,793 @@
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast);
+}
+
+.back:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-6);
+  margin-bottom: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.container h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+  letter-spacing: -0.02em;
+}
+
+.path {
+  color: var(--text-tertiary);
+  font-size: 0.9rem;
+  font-family: var(--font-mono);
+}
+
+.downloadBtn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-base);
+}
+
+.downloadBtn:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+}
+
+.downloadBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.branchSelect {
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tab {
+  padding: var(--space-3) var(--space-5);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all var(--transition-fast);
+}
+
+.tab:hover {
+  color: var(--text-primary);
+}
+
+.tabActive {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.filesSection {
+  margin-bottom: var(--space-8);
+}
+
+.explorerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+  padding: 0 2px;
+}
+
+.explorerTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.explorerBranch {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+}
+
+.fileLoading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-default);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.explorer {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 0;
+  min-height: 560px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.fileTreePanel {
+  border-right: 1px solid var(--border-subtle);
+  padding: 16px;
+  overflow-y: auto;
+  min-width: 0;
+  background: var(--bg-elevated);
+}
+
+.panelTitle {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+  padding: 0 2px;
+}
+
+.contentPanel {
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+}
+
+.section {
+  margin-bottom: var(--space-10);
+}
+
+.section h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.loading,
+.error {
+  padding: var(--space-12);
+  text-align: center;
+  font-size: 1rem;
+}
+
+.error {
+  color: var(--error);
+}
+
+.success {
+  color: var(--success);
+  font-size: 0.95rem;
+  margin-bottom: var(--space-3);
+}
+
+.collabRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+
+.pendingBadge {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+.prBadge {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.45rem;
+  background: var(--accent-muted);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.reviewLink {
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.reviewLink:hover {
+  text-decoration: underline;
+}
+
+.empty {
+  color: var(--text-tertiary);
+  font-size: 0.95rem;
+}
+
+.hint {
+  color: var(--text-tertiary);
+  font-size: 0.9rem;
+  margin-bottom: var(--space-3);
+}
+
+.list,
+.commits {
+  list-style: none;
+}
+
+.branch {
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  transition: border-color var(--transition-fast);
+}
+
+.branch:hover {
+  border-color: var(--border-default);
+}
+
+.branchHelp {
+  color: var(--text-tertiary);
+  font-size: 0.9rem;
+  margin-bottom: var(--space-4);
+}
+
+.branchName {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.branchOk {
+  color: var(--success);
+  margin-left: var(--space-2);
+}
+
+.branchWarn {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+}
+
+.hash {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  background: var(--accent-muted);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.commit {
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-3);
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  transition: border-color var(--transition-fast);
+}
+
+.commit:hover {
+  border-color: var(--border-default);
+}
+
+.commitInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.message {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.meta {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+}
+
+/* ── Commit Graph ── */
+.graphContainer {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+.graphRow {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  padding-right: var(--space-5);
+}
+
+.graphRow:last-child {
+  border-bottom: none;
+}
+
+.graphRow:hover {
+  background: var(--bg-surface);
+}
+
+.graphSvg {
+  flex-shrink: 0;
+}
+
+.graphInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--space-2) 0;
+  padding-left: var(--space-3);
+}
+
+.graphMsgRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.graphMetaRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.graphHash {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent);
+  background: var(--accent-muted);
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+}
+
+.graphAuthor {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.graphDate {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+.graphBranchTag {
+  padding: 0.1rem 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border: 1.5px solid;
+  border-radius: var(--radius-sm);
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.commitClickable {
+  cursor: pointer;
+}
+
+.vegaBadge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  background: var(--accent-muted);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.diffModal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--space-6);
+}
+
+.diffModalContent {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  max-width: 900px;
+  width: 100%;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.diffModalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.diffModalHeader h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.diffModalClose {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0 0.5rem;
+}
+
+.diffModalClose:hover {
+  color: var(--text-primary);
+}
+
+.diffBody {
+  padding: var(--space-4);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.diffFile {
+  margin-bottom: var(--space-6);
+}
+
+.diffFileHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.diffPath {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.diffStatus {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.diffAdded {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--success);
+}
+
+.diffDeleted {
+  background: var(--error-muted);
+  color: var(--error);
+}
+
+.diffModified {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.diffContent {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin: 0;
+  font-family: var(--font-mono);
+}
+
+.diffContent > div {
+  white-space: pre;
+}
+
+.diffAdd {
+  color: var(--success);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.diffDel {
+  color: var(--error);
+  background: var(--error-muted);
+}
+
+.diffContext {
+  color: var(--text-secondary);
+}
+
+.prLink {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.prLink:hover {
+  text-decoration: none;
+}
+
+.conflictBadge {
+  color: var(--error);
+}
+
+.statusApproved {
+  color: var(--success);
+}
+
+.statusRejected {
+  color: var(--error);
+}
+
+.statusMerged {
+  color: var(--accent);
+}
+
+/* ── Public/Private Badge ── */
+.badgePublic,
+.badgePrivate {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badgePublic {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
+
+.badgePrivate {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning, #f59e0b);
+}
+
+.repoDesc {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-top: var(--space-1);
+}
+
+/* ── Settings ── */
+.settingsBlock {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.settingRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.settingRow:last-child {
+  border-bottom: none;
+}
+
+.settingHint {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+  margin: var(--space-1) 0 0 0;
+  max-width: 500px;
+}
+
+.settingInput {
+  margin-top: var(--space-2);
+  width: 100%;
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.settingInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.btnSuccess {
+  padding: var(--space-2) var(--space-4);
+  background: var(--success);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btnDanger {
+  padding: var(--space-2) var(--space-4);
+  background: var(--error);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* ── Collaborator Section ── */
+.collabForm {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-end;
+  margin-top: var(--space-3);
+}
+
+.collabForm .settingInput {
+  flex: 1;
+  margin-top: 0;
+}
+
+.collabAlert {
+  color: var(--error);
+  font-size: 0.85rem;
+  margin-top: var(--space-2);
+}
+
+.collabSuccess {
+  color: var(--success);
+  font-size: 0.85rem;
+  margin-top: var(--space-2);
+}
+
+.collabEmpty {
+  color: var(--text-tertiary);
+  font-size: 0.9rem;
+  padding: var(--space-4) 0 0 0;
+}
+
+.collabList {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.collabItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.collabItem:last-child {
+  border-bottom: none;
+}
+
+.collabName {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.collabBadgeWaiting {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning, #f59e0b);
+}
+
+.collabBadgePr {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.collabAction {
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.collabAction:hover {
+  background: var(--accent);
+  color: white;
+  text-decoration: none;
+}
