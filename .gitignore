@@ -31,3 +31,6 @@ vega-repos-frontend/npm-debug.log*
 *.tmp
 *.bak
 *~
+
+# Markdown (do not track / push)
+*.md
