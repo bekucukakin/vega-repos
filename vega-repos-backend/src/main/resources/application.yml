@@ -24,6 +24,8 @@ vega:
     login-path: /api/auth/login
   pull-service:
     url: ${VEGA_PULL_SERVICE_URL:http://localhost:8083}
+  agent-service:
+    url: ${VEGA_AGENT_SERVICE_URL:http://localhost:8084}
   docs:
     path: ${VEGA_DOCS_PATH:../../../../vegadocs}
 

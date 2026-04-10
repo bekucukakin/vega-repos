@@ -8,15 +8,16 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .container {
   width: 100%;
-  max-width: 400px;
+  max-width: 380px;
 }
 
+/* ── Brand ── */
 .brand {
   text-align: center;
   margin-bottom: var(--space-8);
@@ -26,54 +27,54 @@
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   text-decoration: none;
 }
 
 .logoIcon {
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: linear-gradient(135deg, var(--accent), #6366f1);
   color: #fff;
-  margin-bottom: var(--space-1);
+  box-shadow: 0 0 30px rgba(88,166,255,0.2);
 }
 
 .logo {
-  font-size: 1.6rem;
+  font-size: 1.5rem;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   color: var(--text-primary);
 }
 
 .brandSub {
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-tertiary);
 }
 
-.brandLink:hover .logo {
-  color: var(--accent);
-}
+.brandLink:hover .logo { color: var(--accent); }
 
+/* ── Card ── */
 .card {
   background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
-  padding: var(--space-8);
+  padding: var(--space-8) var(--space-8);
   box-shadow: var(--shadow-lg);
 }
 
 .card h1 {
-  font-size: 1.35rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  margin-bottom: var(--space-1);
+  margin-bottom: 4px;
   letter-spacing: -0.02em;
+  color: var(--text-primary);
 }
 
 .sub {
@@ -82,28 +83,29 @@
   margin-bottom: var(--space-6);
 }
 
+/* ── Form ── */
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 
 .form label {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  font-size: 0.85rem;
+  gap: 6px;
+  font-size: 0.82rem;
   font-weight: 500;
   color: var(--text-secondary);
 }
 
 .form input {
-  padding: var(--space-3) var(--space-4);
+  padding: 9px var(--space-4);
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
@@ -117,29 +119,30 @@
 
 .error {
   background: var(--error-muted);
-  border: 1px solid rgba(248, 81, 73, 0.25);
+  border: 1px solid rgba(248,81,73,0.25);
   color: var(--error);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  font-size: 0.85rem;
+  font-size: 0.83rem;
 }
 
 .submit {
   background: var(--accent);
   color: #fff;
   border: none;
-  padding: var(--space-3) var(--space-4);
+  padding: 10px var(--space-4);
   border-radius: var(--radius-md);
   font-weight: 600;
-  font-size: 0.95rem;
-  margin-top: var(--space-1);
+  font-size: 0.9rem;
+  margin-top: var(--space-2);
   cursor: pointer;
   transition: all var(--transition-base);
+  box-shadow: 0 0 16px rgba(88,166,255,0.15);
 }
 
 .submit:hover:not(:disabled) {
   background: var(--accent-hover);
-  box-shadow: 0 4px 16px rgba(88, 166, 255, 0.3);
+  box-shadow: 0 0 24px rgba(88,166,255,0.3);
 }
 
 .submit:disabled {
@@ -147,6 +150,7 @@
   cursor: not-allowed;
 }
 
+/* ── Footer ── */
 .footer {
   margin-top: var(--space-6);
   font-size: 0.8rem;
@@ -156,4 +160,4 @@
 
 .footer a { color: var(--accent); }
 .footer a:hover { color: var(--accent-hover); }
-.sep { color: var(--border-default); }
+.sep { color: var(--border-default); padding: 0 4px; }

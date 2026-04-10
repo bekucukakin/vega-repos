@@ -189,6 +189,28 @@ public class RepoService {
         return results;
     }
 
+    /**
+     * Repos owned by {@code ownerUsername} that {@code viewerUsername} may see:
+     * public repos, or any repo where the viewer is the owner, or private repos where the viewer is a collaborator.
+     */
+    public List<RepoDto> listRepositoriesVisibleToViewer(String ownerUsername, String viewerUsername) {
+        if (viewerUsername == null || viewerUsername.isBlank()) {
+            return List.of();
+        }
+        List<RepoDto> owned = listRepositories(ownerUsername);
+        List<RepoDto> out = new ArrayList<>();
+        for (RepoDto repo : owned) {
+            boolean isPublic = repo.getIsPublic() != null && repo.getIsPublic();
+            boolean isOwner = viewerUsername.equals(ownerUsername);
+            boolean isCollab = collaboratorRepository.existsByOwnerUsernameAndRepoNameAndCollaboratorUsername(
+                    ownerUsername, repo.getName(), viewerUsername);
+            if (isPublic || isOwner || isCollab) {
+                out.add(repo);
+            }
+        }
+        return out;
+    }
+
     private boolean matchesQuery(RepoDto repo, String q) {
         String name = repo.getName().toLowerCase();
         String owner = repo.getOwner().toLowerCase();

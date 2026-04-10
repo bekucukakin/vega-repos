@@ -12,10 +12,18 @@ import CommitMetricsPage from './pages/CommitMetricsPage'
 import PrMetricsPage from './pages/PrMetricsPage'
 import VegaDocsPage from './pages/VegaDocsPage'
 import ProfilePage from './pages/ProfilePage'
+import PeoplePage from './pages/PeoplePage'
+import PeopleProfilePage from './pages/PeopleProfilePage'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
   return token ? children : <Navigate to="/login" replace />
+}
+
+/** Logged-in users should not see login/register — send them to the app */
+function GuestOnlyRoute({ children }) {
+  const { token } = useAuth()
+  return token ? <Navigate to="/repos" replace /> : children
 }
 
 function App() {
@@ -25,8 +33,22 @@ function App() {
         <Route path="/docs" element={<VegaDocsPage />} />
         <Route path="/" element={<Layout />}>
           <Route index element={<LandingPage />} />
-          <Route path="login" element={<LoginPage />} />
-          <Route path="register" element={<RegisterPage />} />
+          <Route
+            path="login"
+            element={
+              <GuestOnlyRoute>
+                <LoginPage />
+              </GuestOnlyRoute>
+            }
+          />
+          <Route
+            path="register"
+            element={
+              <GuestOnlyRoute>
+                <RegisterPage />
+              </GuestOnlyRoute>
+            }
+          />
           <Route
             path="repos"
             element={
@@ -61,6 +83,22 @@ function App() {
           />
           <Route path="metrics" element={<Navigate to="/metrics/commits" replace />} />
           <Route path="profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
+          <Route
+            path="people/:username"
+            element={
+              <PrivateRoute>
+                <PeopleProfilePage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="people"
+            element={
+              <PrivateRoute>
+                <PeoplePage />
+              </PrivateRoute>
+            }
+          />
           <Route
             path="repos/:username/:repoName"
             element={

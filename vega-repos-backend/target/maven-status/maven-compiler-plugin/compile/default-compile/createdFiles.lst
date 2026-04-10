@@ -1,4 +1,5 @@
 com/vega/repos/dto/BranchDto$BranchDtoBuilder.class
+com/vega/repos/controller/PeopleController$1.class
 com/vega/repos/dto/CommitDiffDto$FileDiffDto$FileDiffDtoBuilder.class
 com/vega/repos/dto/CollaboratorDto$CollaboratorDtoBuilder.class
 com/vega/repos/config/WebConfig.class
@@ -19,6 +20,7 @@ com/vega/repos/repository/RepoSettingsRepository.class
 com/vega/repos/dto/RepoDto.class
 com/vega/repos/dto/BranchDto.class
 com/vega/repos/entity/UserPrMetrics.class
+com/vega/repos/controller/PeopleController.class
 com/vega/repos/dto/PrMetricsDto$PrMetricsDtoBuilder.class
 com/vega/repos/dto/RegisterRequest.class
 com/vega/repos/dto/CommitDiffDto$FileDiffDto.class
@@ -48,6 +50,7 @@ com/vega/repos/entity/CollaboratorRequest.class
 com/vega/repos/dto/VegaMetricsDto$VegaMetricsDtoBuilder.class
 com/vega/repos/repository/CollaboratorRequestRepository.class
 com/vega/repos/dto/PrDto.class
+com/vega/repos/dto/UserPublicDto.class
 com/vega/repos/entity/CollaboratorRequest$CollaboratorRequestBuilder.class
 com/vega/repos/repository/RepoCollaboratorRepository.class
 com/vega/repos/dto/FileContentDto$FileContentDtoBuilder.class

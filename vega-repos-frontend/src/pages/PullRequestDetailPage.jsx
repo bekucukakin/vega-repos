@@ -27,6 +27,9 @@ export default function PullRequestDetailPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [actionError, setActionError] = useState('')
   const [activeTab, setActiveTab] = useState('changes')
+  const [aiAnalysis, setAiAnalysis] = useState(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState('')
 
   const headers = useMemo(() => (token ? { Authorization: `Bearer ${token}` } : {}), [token])
 
@@ -112,6 +115,29 @@ export default function PullRequestDetailPage() {
       .then((r) => (r.ok ? loadPr() : safeJson(r).then((d) => Promise.reject(new Error(d?.error || 'Failed')))))
       .catch((e) => setActionError(e.message || 'Reject failed.'))
       .finally(() => setActionLoading(false))
+  }
+
+  const handleAiAnalysis = async () => {
+    if (aiLoading) return
+    setAiLoading(true)
+    setAiError('')
+    setAiAnalysis(null)
+    try {
+      const r = await fetch(
+        `${API_BASE}/repos/${username}/${repoName}/pull-requests/${prId}/ai-analysis`,
+        { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' } }
+      )
+      const data = await safeJson(r)
+      if (r.ok && data?.success) {
+        setAiAnalysis(data)
+      } else {
+        setAiError(data?.error || `AI service returned ${r.status}`)
+      }
+    } catch (e) {
+      setAiError(e?.message || 'Failed to reach AI service.')
+    } finally {
+      setAiLoading(false)
+    }
   }
 
   const handleMerge = () => {

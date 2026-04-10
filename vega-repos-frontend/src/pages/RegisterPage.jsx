@@ -44,7 +44,6 @@ export default function RegisterPage() {
   const [fieldErrors, setFieldErrors] = useState({})
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [registered, setRegistered] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
 
@@ -89,15 +88,13 @@ export default function RegisterPage() {
         throw new Error(typeof msg === 'string' ? msg : 'Registration failed.')
       }
       login(data)
-      setRegistered(true)
+      navigate('/repos', { replace: true })
     } catch (err) {
       setError(parseApiError(err))
     } finally {
       setLoading(false)
     }
   }
-
-  if (registered) return null
 
   return (
     <div className={styles.wrapper}>
@@ -180,10 +177,6 @@ export default function RegisterPage() {
             <span className={styles.sep}> · </span>
             <Link to="/">← Back to home</Link>
           </p>
-        </div>
-        <div className={styles.cliHint}>
-          <p>You can also login from the CLI after registering:</p>
-          <code>vega login &lt;username&gt; &lt;password&gt;</code>
         </div>
       </div>
     </div>

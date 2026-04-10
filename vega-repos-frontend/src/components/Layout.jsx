@@ -31,6 +31,11 @@ const NAV_ICONS = {
       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   ),
+  '/people': (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
+    </svg>
+  ),
 }
 
 export default function Layout() {
@@ -39,7 +44,8 @@ export default function Layout() {
   const navigate = useNavigate()
 
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState([])
+  const [repoResults, setRepoResults] = useState([])
+  const [peopleResults, setPeopleResults] = useState([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [searching, setSearching] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -50,6 +56,7 @@ export default function Layout() {
   const navItems = [
     { path: '/', label: 'Dashboard' },
     { path: '/repos', label: 'Repositories' },
+    { path: '/people', label: 'People' },
     { path: '/metrics/commits', label: 'Commit Metrics' },
     { path: '/metrics/pr-reviews', label: 'PR Reviews' },
     { path: '/collaborator-requests', label: 'Collaborators' },
@@ -59,12 +66,32 @@ export default function Layout() {
 
   const doSearch = useCallback((q) => {
     const trimmed = q.trim()
-    if (!trimmed) { setResults([]); setShowDropdown(false); return }
+    if (!trimmed) {
+      setRepoResults([])
+      setPeopleResults([])
+      setShowDropdown(false)
+      return
+    }
     setSearching(true)
-    fetch(`${API_BASE}/repos/search?q=${encodeURIComponent(trimmed)}`, { headers: getAuthHeader() })
-      .then((r) => r.ok ? r.json() : [])
-      .then((data) => { setResults(data); setShowDropdown(true) })
-      .catch(() => setResults([]))
+    const headers = getAuthHeader()
+    const repoReq = fetch(`${API_BASE}/repos/search?q=${encodeURIComponent(trimmed)}`, { headers })
+    const peopleReq =
+      trimmed.length >= 2
+        ? fetch(`${API_BASE}/people/search?q=${encodeURIComponent(trimmed)}&limit=20`, { headers })
+        : Promise.resolve({ ok: true, json: () => Promise.resolve([]) })
+
+    Promise.all([repoReq, peopleReq])
+      .then(async ([r1, r2]) => {
+        const repos = r1.ok ? await r1.json() : []
+        const people = r2.ok ? await r2.json() : []
+        setRepoResults(Array.isArray(repos) ? repos : [])
+        setPeopleResults(Array.isArray(people) ? people : [])
+        setShowDropdown(true)
+      })
+      .catch(() => {
+        setRepoResults([])
+        setPeopleResults([])
+      })
       .finally(() => setSearching(false))
   }, [getAuthHeader])
 
@@ -72,7 +99,7 @@ export default function Layout() {
     const val = e.target.value
     setQuery(val)
     if (searchTimer.current) clearTimeout(searchTimer.current)
-    if (!val.trim()) { setResults([]); setShowDropdown(false); return }
+    if (!val.trim()) { setRepoResults([]); setPeopleResults([]); setShowDropdown(false); return }
     searchTimer.current = setTimeout(() => doSearch(val), 250)
   }
 
@@ -85,15 +112,23 @@ export default function Layout() {
     }
   }
 
-  const handleSelect = (repo) => {
+  const handleSelectRepo = (repo) => {
     setShowDropdown(false)
     setQuery('')
     navigate(`/repos/${repo.owner}/${repo.name}`)
   }
 
+  const handleSelectPerson = (person) => {
+    setShowDropdown(false)
+    setQuery('')
+    navigate(`/people/${encodeURIComponent(person.username)}`)
+  }
+
   useEffect(() => {
     const handler = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setShowDropdown(false)
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+      setShowDropdown(false)
+    }
       if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setUserMenuOpen(false)
     }
     document.addEventListener('mousedown', handler)
@@ -192,16 +227,18 @@ export default function Layout() {
               </svg>
               <input
                 type="text"
-                placeholder="Search repositories..."
+                placeholder="Search repositories and people…"
                 className={styles.globalSearch}
                 value={query}
                 onChange={handleInput}
                 onKeyDown={handleKeyDown}
-                onFocus={() => { if (results.length > 0 && query.trim()) setShowDropdown(true) }}
+                onFocus={() => {
+                  if ((repoResults.length > 0 || peopleResults.length > 0) && query.trim()) setShowDropdown(true)
+                }}
                 autoComplete="off"
               />
               {query && (
-                <button type="button" className={styles.searchClear} onClick={() => { setQuery(''); setResults([]); setShowDropdown(false) }}>
+                <button type="button" className={styles.searchClear} onClick={() => { setQuery(''); setRepoResults([]); setPeopleResults([]); setShowDropdown(false) }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
@@ -210,26 +247,53 @@ export default function Layout() {
               {showDropdown && (
                 <div className={styles.searchDropdown}>
                   {searching && <div className={styles.searchStatus}>Searching...</div>}
-                  {!searching && results.length === 0 && query.trim() && (
-                    <div className={styles.searchStatus}>No repositories found for &ldquo;{query.trim()}&rdquo;</div>
+                  {!searching && repoResults.length === 0 && peopleResults.length === 0 && query.trim() && (
+                    <div className={styles.searchStatus}>No results for &ldquo;{query.trim()}&rdquo;</div>
                   )}
-                  {results.map((repo) => (
-                    <button
-                      key={`${repo.owner}/${repo.name}`}
-                      type="button"
-                      className={styles.searchResult}
-                      onClick={() => handleSelect(repo)}
-                    >
-                      <div className={styles.searchResultMain}>
-                        <span className={styles.searchResultName}>{repo.name}</span>
-                        <span className={repo.isPublic ? styles.searchBadgePublic : styles.searchBadgePrivate}>
-                          {repo.isPublic ? 'Public' : 'Private'}
-                        </span>
-                      </div>
-                      <span className={styles.searchResultOwner}>{repo.owner}/{repo.name}</span>
-                      {repo.description && <span className={styles.searchResultDesc}>{repo.description}</span>}
-                    </button>
-                  ))}
+                  {!searching && peopleResults.length > 0 && (
+                    <>
+                      <div className={styles.searchSectionLabel}>People</div>
+                      {peopleResults.map((u) => (
+                        <button
+                          key={u.username}
+                          type="button"
+                          className={styles.searchResult}
+                          onClick={() => handleSelectPerson(u)}
+                        >
+                          <div className={styles.searchResultMain}>
+                            <span className={styles.searchResultName}>{u.username}</span>
+                          </div>
+                          {(u.firstName || u.lastName) && (
+                            <span className={styles.searchResultDesc}>
+                              {[u.firstName, u.lastName].filter(Boolean).join(' ')}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                  {!searching && repoResults.length > 0 && (
+                    <>
+                      <div className={styles.searchSectionLabel}>Repositories</div>
+                      {repoResults.map((repo) => (
+                        <button
+                          key={`${repo.owner}/${repo.name}`}
+                          type="button"
+                          className={styles.searchResult}
+                          onClick={() => handleSelectRepo(repo)}
+                        >
+                          <div className={styles.searchResultMain}>
+                            <span className={styles.searchResultName}>{repo.name}</span>
+                            <span className={repo.isPublic ? styles.searchBadgePublic : styles.searchBadgePrivate}>
+                              {repo.isPublic ? 'Public' : 'Private'}
+                            </span>
+                          </div>
+                          <span className={styles.searchResultOwner}>{repo.owner}/{repo.name}</span>
+                          {repo.description && <span className={styles.searchResultDesc}>{repo.description}</span>}
+                        </button>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
             </div>

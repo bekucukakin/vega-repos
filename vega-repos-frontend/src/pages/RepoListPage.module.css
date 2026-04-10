@@ -1,198 +1,327 @@
-.container {
-  max-width: 1200px;
+.page {
+  max-width: 900px;
   animation: fadeIn 0.3s var(--ease-out);
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.header {
+/* ── Header ── */
+.pageHeader {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: var(--space-8);
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
 }
 
-.header h1 {
-  font-size: 1.5rem;
+.pageTitle {
+  font-size: 1.35rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  margin-bottom: var(--space-1);
+  color: var(--text-primary);
 }
 
-.sub {
+.pageCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 7px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+/* ── States ── */
+.loading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-12);
   color: var(--text-secondary);
   font-size: 0.9rem;
 }
 
-/* ── States ── */
-.loading,
-.error {
-  padding: var(--space-12);
-  text-align: center;
-  font-size: 0.95rem;
+.loadingSpinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-default);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
 }
 
-.loading { color: var(--text-secondary); }
-.error { color: var(--error); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.errorState {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-6);
+  background: var(--error-muted);
+  border: 1px solid rgba(248,81,73,0.2);
+  border-radius: var(--radius-lg);
+  color: var(--error);
+  font-size: 0.9rem;
+}
 
 .empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-16);
+  padding: var(--space-16) var(--space-8);
   text-align: center;
   color: var(--text-secondary);
-  background: var(--bg-card);
   border: 1px dashed var(--border-default);
   border-radius: var(--radius-xl);
 }
 
-.emptyIcon {
-  color: var(--text-tertiary);
-  margin-bottom: var(--space-2);
-}
+.empty svg { color: var(--text-tertiary); }
 
 .empty p {
   font-size: 1rem;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
+  margin: 0;
 }
 
 .empty span {
   font-size: 0.85rem;
+  color: var(--text-secondary);
 }
 
 .empty code {
-  padding: 2px 8px;
+  padding: 4px 10px;
   background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  font-size: 0.85em;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
   color: var(--accent);
 }
 
-/* ── Section ── */
-.section {
-  margin-bottom: var(--space-8);
+/* ── Panel ── */
+.repoPanel {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 
-.sectionTitle {
+/* ── Filter Bar ── */
+.filterBar {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: var(--space-5);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-default);
+  flex-wrap: wrap;
 }
 
-.count {
+.searchWrap {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+  max-width: 340px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.filterInput {
+  width: 100%;
+  padding: 7px 12px 7px 30px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.filterInput::placeholder { color: var(--text-tertiary); }
+
+.filterInput:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+
+/* ── Tabs ── */
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--border-subtle);
+}
+
+.tabActive {
+  color: var(--text-primary) !important;
+  background: var(--bg-hover) !important;
+  border-color: var(--border-default) !important;
+}
+
+.tabCount {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 22px;
-  height: 20px;
-  padding: 0 6px;
-  font-size: 0.7rem;
-  font-weight: 700;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  background: var(--bg-base);
   border-radius: var(--radius-full);
-  background: var(--bg-hover);
+  font-size: 0.65rem;
+  font-weight: 700;
   color: var(--text-tertiary);
 }
 
-/* ── Card Grid ── */
-.cardGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: var(--space-4);
+/* ── Repo List ── */
+.repoList {
+  background: var(--bg-elevated);
 }
 
-.card {
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-5);
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  transition: all var(--transition-base);
-  text-decoration: none;
-  min-height: 110px;
+.noResults {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 
-.card:hover {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-muted), var(--shadow-md);
-  transform: translateY(-1px);
-  text-decoration: none;
+.noResults strong { color: var(--text-primary); }
+
+/* ── Repo Row ── */
+.repoRow {
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--transition-fast);
 }
 
-.cardHeader {
+.repoRow:last-child { border-bottom: none; }
+.repoRow:hover { background: var(--bg-hover); }
+
+.repoMain { display: flex; flex-direction: column; gap: 6px; }
+
+.repoNameRow {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-2);
+  flex-wrap: wrap;
 }
 
-.cardIcon {
+.repoIcon {
   color: var(--text-tertiary);
-  display: flex;
-  align-items: center;
+  flex-shrink: 0;
+  margin-right: 2px;
 }
 
-.cardTitle {
-  font-size: 1rem;
+.repoLink {
+  font-size: 0.95rem;
   font-weight: 600;
-  color: var(--text-primary);
-  flex: 1;
+  color: var(--accent) !important;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  transition: color var(--transition-fast);
+}
+
+.repoLink:hover {
+  color: var(--accent-hover) !important;
+  text-decoration: underline;
+}
+
+.repoOwner {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.repoSlash {
+  color: var(--text-tertiary);
+  margin: 0 1px;
+}
+
+.repoName {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .badgePublic,
 .badgePrivate {
-  padding: 2px 8px;
+  padding: 1px 8px;
   font-size: 0.65rem;
   font-weight: 600;
-  border-radius: var(--radius-full);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
 .badgePublic {
-  background: rgba(63, 185, 80, 0.12);
   color: var(--success);
+  background: rgba(63,185,80,0.12);
+  border: 1px solid rgba(63,185,80,0.25);
 }
 
 .badgePrivate {
-  background: rgba(210, 153, 34, 0.12);
   color: var(--warning);
+  background: rgba(210,153,34,0.12);
+  border: 1px solid rgba(210,153,34,0.25);
 }
 
-.cardOwner {
-  font-size: 0.8rem;
-  color: var(--text-tertiary);
-  margin-bottom: var(--space-2);
-}
-
-.cardDesc {
+.repoDesc {
   font-size: 0.85rem;
   color: var(--text-secondary);
-  margin-bottom: var(--space-3);
-  line-height: 1.45;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 600px;
 }
 
-.cardFooter {
-  margin-top: auto;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border-subtle);
+.repoMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: 2px;
 }
 
-.cardPath {
+.metaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 0.75rem;
   color: var(--text-tertiary);
-  font-family: var(--font-mono);
 }
+
+.metaItem svg { flex-shrink: 0; }

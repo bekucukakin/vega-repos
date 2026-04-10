@@ -1,9 +1,14 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 
 const AuthContext = createContext(null)
 
 const TOKEN_KEY = 'vega_token'
 const USER_KEY = 'vega_user'
+
+/** No activity for this long → logout (in addition to JWT expiry) */
+const IDLE_LIMIT_MS = 30 * 60 * 1000
+/** How often we check JWT expiry + idle */
+const SESSION_CHECK_MS = 15 * 1000
 
 function safeGetItem(key) {
   try {
@@ -20,16 +25,59 @@ function safeSetItem(key, value) {
   } catch { /* ignore */ }
 }
 
-export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => safeGetItem(TOKEN_KEY))
-  const [user, setUser] = useState(() => {
-    try {
-      const u = safeGetItem(USER_KEY)
-      return u ? JSON.parse(u) : null
-    } catch {
-      return null
+/** Decode JWT payload (no verification — expiry only for client-side UX) */
+function parseJwtExpiryMs(token) {
+  if (!token || typeof token !== 'string') return null
+  try {
+    const part = token.split('.')[1]
+    if (!part) return null
+    const base64 = part.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
+    const payload = JSON.parse(atob(padded))
+    if (typeof payload.exp === 'number') {
+      return payload.exp * 1000
     }
-  })
+    return null
+  } catch {
+    return null
+  }
+}
+
+function loadStoredSession() {
+  const t = safeGetItem(TOKEN_KEY)
+  if (!t) return { token: null, user: null }
+  const expMs = parseJwtExpiryMs(t)
+  if (expMs != null && Date.now() >= expMs) {
+    safeSetItem(TOKEN_KEY, null)
+    safeSetItem(USER_KEY, null)
+    return { token: null, user: null }
+  }
+  let user = null
+  try {
+    const raw = safeGetItem(USER_KEY)
+    if (raw) user = JSON.parse(raw)
+  } catch {
+    /* ignore */
+  }
+  return { token: t, user }
+}
+
+export function AuthProvider({ children }) {
+  const initial = loadStoredSession()
+  const [token, setToken] = useState(initial.token)
+  const [user, setUser] = useState(initial.user)
+
+  const lastActivityRef = useRef(Date.now())
+  const tokenRef = useRef(token)
+
+  useEffect(() => {
+    tokenRef.current = token
+  }, [token])
+
+  const logout = useCallback(() => {
+    setToken(null)
+    setUser(null)
+  }, [])
 
   useEffect(() => {
     if (token) {
@@ -49,12 +97,47 @@ export function AuthProvider({ children }) {
     }
     setUser(userData)
     safeSetItem(USER_KEY, JSON.stringify(userData))
+    lastActivityRef.current = Date.now()
   }
 
-  const logout = () => {
-    setToken(null)
-    setUser(null)
-  }
+  // JWT expiry + idle timeout while logged in
+  useEffect(() => {
+    if (!token) return undefined
+
+    lastActivityRef.current = Date.now()
+
+    const bump = () => {
+      lastActivityRef.current = Date.now()
+    }
+
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click']
+    events.forEach((e) => {
+      window.addEventListener(e, bump, { passive: true, capture: true })
+    })
+
+    const tick = () => {
+      const t = tokenRef.current
+      if (!t) return
+
+      const expMs = parseJwtExpiryMs(t)
+      if (expMs != null && Date.now() >= expMs) {
+        logout()
+        return
+      }
+      if (Date.now() - lastActivityRef.current > IDLE_LIMIT_MS) {
+        logout()
+      }
+    }
+
+    const id = window.setInterval(tick, SESSION_CHECK_MS)
+
+    return () => {
+      window.clearInterval(id)
+      events.forEach((e) => {
+        window.removeEventListener(e, bump, { capture: true })
+      })
+    }
+  }, [token, logout])
 
   const getAuthHeader = () => (token ? { Authorization: `Bearer ${token}` } : {})
 

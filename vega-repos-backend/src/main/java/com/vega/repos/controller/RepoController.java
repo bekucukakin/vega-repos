@@ -12,14 +12,22 @@ import com.vega.repos.service.RepoAccessService;
 import com.vega.repos.service.RepoDownloadService;
 import com.vega.repos.service.RepoFileService;
 import com.vega.repos.service.RepoService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/repos")
@@ -30,6 +38,13 @@ public class RepoController {
     private final RepoFileService repoFileService;
     private final RepoAccessService repoAccessService;
     private final MetricsService metricsService;
+
+    @Value("${vega.agent-service.url:http://localhost:8084}")
+    private String agentServiceUrl;
+
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
 
     public RepoController(RepoService repoService, RepoDownloadService repoDownloadService,
                           RepoFileService repoFileService, RepoAccessService repoAccessService,
@@ -325,5 +340,106 @@ public class RepoController {
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .contentLength(zip.length)
                 .body(zip);
+    }
+
+    /**
+     * AI-powered PR risk analysis — proxies to agent-service.
+     * POST /api/repos/{username}/{repoName}/pull-requests/{prId}/ai-analysis
+     * Returns JSON from agent service: { explanation, riskSummary, success, error }
+     */
+    @PostMapping("/{username}/{repoName}/pull-requests/{prId}/ai-analysis")
+    public ResponseEntity<String> getPrAiAnalysis(
+            @RequestHeader(value = "Authorization", required = false) String auth,
+            @PathVariable String username, @PathVariable String repoName,
+            @PathVariable String prId) {
+        String currentUser = repoAccessService.resolveUsername(auth);
+        if (currentUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        if (!repoAccessService.canAccess(currentUser, username, repoName)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        PrDto pr = repoService.getPullRequest(username, repoName, prId);
+        if (pr == null) return ResponseEntity.notFound().build();
+
+        // Fetch diff to get file list and line counts from actual diff data
+        CommitDiffDto diff = repoService.getPrDiff(username, repoName, pr.getSourceBranch(), pr.getTargetBranch());
+        List<String> filesChanged = pr.getRiskReasons() != null ? new java.util.ArrayList<>() : new java.util.ArrayList<>();
+        int linesAdded = pr.getSummaryLinesAdded() != null ? pr.getSummaryLinesAdded() : 0;
+        int linesRemoved = pr.getSummaryLinesRemoved() != null ? pr.getSummaryLinesRemoved() : 0;
+
+        // Collect changed files and build diff sample
+        StringBuilder diffSample = new StringBuilder();
+        if (diff != null && diff.getFiles() != null) {
+            for (var f : diff.getFiles()) {
+                filesChanged.add(f.getPath());
+                if (diffSample.length() < 3000 && f.getUnifiedDiff() != null) {
+                    diffSample.append("--- ").append(f.getPath()).append("\n");
+                    diffSample.append(f.getUnifiedDiff(), 0,
+                            Math.min(f.getUnifiedDiff().length(), 800)).append("\n\n");
+                }
+            }
+        } else if (pr.getSummaryFilesChanged() != null) {
+            linesAdded = pr.getSummaryLinesAdded() != null ? pr.getSummaryLinesAdded() : 0;
+            linesRemoved = pr.getSummaryLinesRemoved() != null ? pr.getSummaryLinesRemoved() : 0;
+        }
+
+        // Build JSON body for agent service
+        String reasons = pr.getRiskReasons() == null ? "[]" :
+                "[" + pr.getRiskReasons().stream()
+                     .map(r -> "\"" + r.replace("\"", "\\\"") + "\"")
+                     .collect(Collectors.joining(",")) + "]";
+        String files = "[" + filesChanged.stream()
+                .map(f -> "\"" + f.replace("\"", "\\\"") + "\"")
+                .collect(Collectors.joining(",")) + "]";
+
+        try {
+            String agentBody = String.format("""
+                {
+                  "repositoryName": "%s",
+                  "sourceBranch": "%s",
+                  "targetBranch": "%s",
+                  "author": "%s",
+                  "filesChanged": %s,
+                  "linesAdded": %d,
+                  "linesRemoved": %d,
+                  "riskReasons": %s,
+                  "riskLevel": "%s",
+                  "diffSample": "%s"
+                }
+                """,
+                    escapeJson(username + "/" + repoName),
+                    escapeJson(pr.getSourceBranch()),
+                    escapeJson(pr.getTargetBranch()),
+                    escapeJson(pr.getAuthor()),
+                    files,
+                    linesAdded, linesRemoved,
+                    reasons,
+                    pr.getRiskLevel() != null ? pr.getRiskLevel() : "UNKNOWN",
+                    escapeJson(diffSample.toString())
+            );
+
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(agentServiceUrl + "/api/agent/pr-analysis"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(agentBody))
+                    .timeout(Duration.ofSeconds(35))
+                    .build();
+
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            return ResponseEntity.status(resp.statusCode())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(resp.body());
+
+        } catch (IOException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body("{\"success\":false,\"error\":\"Agent service unreachable: " + e.getMessage() + "\"}");
+        }
+    }
+
+    private String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
     }
 }

@@ -2,134 +2,155 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import styles from './LandingPage.module.css'
 
+const TERMINAL_LINES = [
+  { prefix: '$ ', text: 'vega init', delay: 0 },
+  { prefix: '  ', text: 'Initialized empty Vega repository in .vega', dim: true, delay: 1 },
+  { prefix: '$ ', text: 'vega add . && vega commit --ai', delay: 2 },
+  { prefix: '  ', text: '✓ AI commit: "Add user authentication module"', success: true, delay: 3 },
+  { prefix: '$ ', text: 'vega push my-project', delay: 4 },
+  { prefix: '  ', text: '✓ Repository pushed to HDFS — ozantest/my-project', success: true, delay: 5 },
+  { prefix: '$ ', text: 'vega merge feature --ai', delay: 6 },
+  { prefix: '  ', text: '✓ 3 conflicts resolved by Gemini AI', success: true, delay: 7 },
+]
+
 const FEATURES = [
   {
     icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" />
+        <path d="M13 6h3a2 2 0 0 1 2 2v7" /><path d="M6 9v12" />
       </svg>
     ),
-    title: 'AI Merge Resolution',
-    desc: 'Automatically resolve complex merge conflicts using Gemini AI with a single command.',
-    code: 'vega merge --ai',
+    label: 'Branching & Merging',
+    desc: 'Full branch management with AI-powered conflict resolution via Google Gemini.',
   },
   {
     icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
       </svg>
     ),
-    title: 'AI Commit Messages',
-    desc: 'Generate meaningful, conventional commit messages from your staged changes automatically.',
-    code: 'vega commit --ai',
+    label: 'AI Commit Messages',
+    desc: 'Generate meaningful commit messages from staged diffs automatically.',
   },
   {
     icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /><path d="M6 9v12" />
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="9 11 12 14 22 4" />
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
       </svg>
     ),
-    title: 'Pull Request & Code Review',
-    desc: 'Create, review, and approve pull requests with a modern web interface and inline diffs.',
-    code: null,
+    label: 'Pull Requests & Review',
+    desc: 'Code review with inline diffs, risk analysis, and automated metrics.',
   },
   {
     icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="2" width="20" height="8" rx="2" ry="2" /><rect x="2" y="14" width="20" height="8" rx="2" ry="2" /><line x1="6" y1="6" x2="6.01" y2="6" /><line x1="6" y1="18" x2="6.01" y2="18" />
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+        <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+        <line x1="6" y1="6" x2="6.01" y2="6" /><line x1="6" y1="18" x2="6.01" y2="18" />
       </svg>
     ),
-    title: 'Hadoop HDFS Storage',
-    desc: 'Distributed repository storage with push/pull operations powered by Hadoop HDFS.',
-    code: 'vega push my-repo',
+    label: 'Distributed Storage',
+    desc: 'Push and pull repositories backed by Apache Hadoop HDFS.',
   },
-]
-
-const STATS = [
-  { value: 'Git-like', label: 'CLI Experience' },
-  { value: 'AI', label: 'Powered Merges' },
-  { value: 'HDFS', label: 'Distributed Storage' },
-  { value: 'Web', label: 'UI & Code Review' },
 ]
 
 export default function LandingPage() {
   const { token } = useAuth()
 
   return (
-    <div className={styles.landing}>
+    <div className={styles.page}>
+
+      {/* ── Hero ── */}
       <section className={styles.hero}>
-        <div className={styles.heroBg} />
-        <div className={styles.heroInner}>
-          <div className={styles.heroLeft}>
-            <div className={styles.badge}>Open Source VCS</div>
-            <h1 className={styles.title}>
-              Version Control,<br />
-              <span className={styles.gradient}>Reimagined with AI</span>
-            </h1>
-            <p className={styles.description}>
-              VEGA is a full-featured, AI-powered version control system. Resolve merge conflicts automatically,
-              generate commit messages, and deploy to Hadoop HDFS — all with a familiar Git-compatible CLI.
-            </p>
-            <div className={styles.heroCtas}>
-              {token ? (
-                <Link to="/repos" className={styles.ctaPrimary}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        <div className={styles.heroGlow} />
+        <div className={styles.heroContent}>
+          <div className={styles.pill}>Version Control · AI · HDFS</div>
+          <h1 className={styles.heroTitle}>
+            Where code meets<br />
+            <span className={styles.gradient}>intelligence</span>
+          </h1>
+          <p className={styles.heroSub}>
+            VEGA is an AI-powered version control system built for modern teams.
+            Commit, branch, review, and resolve conflicts — all from a familiar CLI.
+          </p>
+          <div className={styles.heroCtas}>
+            {token ? (
+              <Link to="/repos" className={styles.btnPrimary}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                </svg>
+                Go to Repositories
+              </Link>
+            ) : (
+              <>
+                <Link to="/login" className={styles.btnPrimary}>
+                  Get started
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
                   </svg>
-                  View Repositories
                 </Link>
-              ) : (
-                <>
-                  <Link to="/login" className={styles.ctaPrimary}>
-                    Get Started
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-                    </svg>
-                  </Link>
-                  <Link to="/docs" className={styles.ctaSecondary}>Read the Docs</Link>
-                </>
-              )}
+                <Link to="/docs" className={styles.btnSecondary}>Documentation</Link>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Terminal mockup */}
+        <div className={styles.terminal}>
+          <div className={styles.terminalBar}>
+            <span className={styles.dot} style={{ background: '#ff5f57' }} />
+            <span className={styles.dot} style={{ background: '#febc2e' }} />
+            <span className={styles.dot} style={{ background: '#28c840' }} />
+            <span className={styles.terminalTitle}>zsh — vega</span>
+          </div>
+          <div className={styles.terminalBody}>
+            {TERMINAL_LINES.map((line, i) => (
+              <div key={i} className={`${styles.termLine} ${line.dim ? styles.dimLine : ''} ${line.success ? styles.successLine : ''}`}>
+                <span className={styles.termPrefix}>{line.prefix}</span>
+                <span>{line.text}</span>
+              </div>
+            ))}
+            <div className={styles.termLine}>
+              <span className={styles.termPrefix}>$ </span>
+              <span className={styles.cursor}>_</span>
             </div>
           </div>
+        </div>
+      </section>
 
-          {!token && (
-            <div className={styles.loginCard}>
-              <div className={styles.loginCardInner}>
-                <h2 className={styles.loginTitle}>Welcome back</h2>
-                <p className={styles.loginSub}>Sign in to access your repositories</p>
-                <Link to="/login" className={styles.loginBtn}>Sign in to VEGA</Link>
-                <p className={styles.loginFooter}>
-                  New user? <Link to="/register">Create account</Link>
-                </p>
+      {/* ── Features ── */}
+      <section className={styles.features}>
+        <div className={styles.featuresGrid}>
+          {FEATURES.map((f) => (
+            <div key={f.label} className={styles.featureItem}>
+              <div className={styles.featureIconWrap}>{f.icon}</div>
+              <div>
+                <div className={styles.featureLabel}>{f.label}</div>
+                <div className={styles.featureDesc}>{f.desc}</div>
               </div>
             </div>
-          )}
-        </div>
-
-        <div className={styles.statsBar}>
-          {STATS.map((s) => (
-            <div key={s.label} className={styles.stat}>
-              <span className={styles.statValue}>{s.value}</span>
-              <span className={styles.statLabel}>{s.label}</span>
-            </div>
           ))}
         </div>
       </section>
 
-      <section className={styles.features}>
-        <h2 className={styles.sectionTitle}>Core Capabilities</h2>
-        <p className={styles.sectionSub}>Everything you need for modern version control, powered by AI.</p>
-        <div className={styles.featureGrid}>
-          {FEATURES.map((f) => (
-            <div key={f.title} className={styles.featureCard}>
-              <div className={styles.featureIcon}>{f.icon}</div>
-              <h3>{f.title}</h3>
-              <p>{f.desc}</p>
-              {f.code && <code className={styles.featureCode}>{f.code}</code>}
+      {/* ── Auth CTA (unauthenticated only) ── */}
+      {!token && (
+        <section className={styles.cta}>
+          <div className={styles.ctaInner}>
+            <div>
+              <h2 className={styles.ctaTitle}>Ready to get started?</h2>
+              <p className={styles.ctaSub}>Create a free account and push your first repository in minutes.</p>
             </div>
-          ))}
-        </div>
-      </section>
+            <div className={styles.ctaActions}>
+              <Link to="/register" className={styles.btnPrimary}>Create account</Link>
+              <Link to="/login" className={styles.btnSecondary}>Sign in</Link>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   )
 }
