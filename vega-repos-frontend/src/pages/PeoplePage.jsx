@@ -17,6 +17,8 @@ export default function PeoplePage() {
       const trimmed = query.trim()
       if (trimmed.length < 2) {
         setResults([])
+        setLoading(false)
+        setError('')
         return
       }
       setLoading(true)
@@ -25,6 +27,8 @@ export default function PeoplePage() {
         headers: getAuthHeader(),
       })
         .then((r) => {
+          if (r.status === 401 || r.status === 403) throw new Error('Please sign in again.')
+          if (r.status === 502) throw new Error('Could not reach user directory. Is User Service running?')
           if (!r.ok) throw new Error('Search failed')
           return r.json()
         })
@@ -45,7 +49,7 @@ export default function PeoplePage() {
       <div className={styles.pageHeader}>
         <h1 className={styles.pageTitle}>People</h1>
         <p className={styles.pageSub}>
-          Find teammates by username or name. You can open their profile to see repositories you are allowed to view (public repos, or private repos where you are a collaborator).
+          Search by username, first name, or last name (at least 2 characters). Open a profile to see repositories you can view (public repos, or private repos where you are a collaborator).
         </p>
       </div>
 
@@ -71,7 +75,7 @@ export default function PeoplePage() {
         <div className={styles.empty}>No users match &ldquo;{q.trim()}&rdquo;.</div>
       )}
 
-      {q.trim().length > 0 && q.trim().length < 2 && (
+      {!loading && q.trim().length < 2 && !error && (
         <div className={styles.hint}>Type at least 2 characters to search.</div>
       )}
 

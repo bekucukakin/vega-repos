@@ -10,6 +10,12 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8086',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            const a = req.headers.authorization
+            if (a) proxyReq.setHeader('Authorization', a)
+          })
+        },
       },
     },
   },

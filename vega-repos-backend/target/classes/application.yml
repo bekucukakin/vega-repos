@@ -21,6 +21,8 @@ spring:
 vega:
   user-service:
     url: ${VEGA_USER_SERVICE_URL:http://localhost:8085}
+    # Same signing secret as user-service jwt.secret (so Vega Repos can read JWT subject without calling user-service)
+    jwt-secret: ${JWT_SECRET:rUv4rvWiB848GGv5+xXP/5tzQrgutI0/ZN6tLejDGU+8fnuBRU4cxckkxyvyMDHsobgM3fs086svyvMnkJAC5w==}
     login-path: /api/auth/login
   pull-service:
     url: ${VEGA_PULL_SERVICE_URL:http://localhost:8083}

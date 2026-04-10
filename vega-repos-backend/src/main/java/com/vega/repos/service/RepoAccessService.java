@@ -23,22 +23,31 @@ public class RepoAccessService {
     private final RestTemplate restTemplate;
     private final RepoCollaboratorRepository collaboratorRepository;
     private final RepoSettingsRepository repoSettingsRepository;
+    private final UserServiceJwtParser userServiceJwtParser;
 
     @Value("${vega.user-service.url:http://localhost:8085}")
     private String userServiceUrl;
 
     public RepoAccessService(RestTemplate restTemplate,
                              RepoCollaboratorRepository collaboratorRepository,
-                             RepoSettingsRepository repoSettingsRepository) {
+                             RepoSettingsRepository repoSettingsRepository,
+                             UserServiceJwtParser userServiceJwtParser) {
         this.restTemplate = restTemplate;
         this.collaboratorRepository = collaboratorRepository;
         this.repoSettingsRepository = repoSettingsRepository;
+        this.userServiceJwtParser = userServiceJwtParser;
     }
 
     public String resolveUsername(String authHeader) {
         if (authHeader == null || authHeader.isBlank()) return null;
         String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
         if (token.isBlank()) return null;
+
+        String fromJwt = userServiceJwtParser.extractUsername(token);
+        if (fromJwt != null && !fromJwt.isBlank()) {
+            return fromJwt;
+        }
+
         try {
             String url = userServiceUrl + "/api/auth/username";
             HttpHeaders headers = new HttpHeaders();
@@ -49,7 +58,7 @@ public class RepoAccessService {
                 return response.getBody().replaceAll("^\"|\"$", "").trim();
             }
         } catch (Exception e) {
-            log.debug("Failed to resolve username from token: {}", e.getMessage());
+            log.warn("Could not resolve username from user-service (JWT parse also failed): {}", e.getMessage());
         }
         return null;
     }

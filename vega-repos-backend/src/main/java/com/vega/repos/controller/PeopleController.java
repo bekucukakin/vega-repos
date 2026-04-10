@@ -4,6 +4,8 @@ import com.vega.repos.dto.RepoDto;
 import com.vega.repos.dto.UserPublicDto;
 import com.vega.repos.service.RepoAccessService;
 import com.vega.repos.service.RepoService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
@@ -12,6 +14,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -26,6 +29,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/people")
 public class PeopleController {
+
+    private static final Logger log = LoggerFactory.getLogger(PeopleController.class);
 
     private final RestTemplate restTemplate;
     private final RepoAccessService repoAccessService;
@@ -53,15 +58,12 @@ public class PeopleController {
         }
         URI uri = UriComponentsBuilder.fromUriString(userServiceUrl + "/api/users/search")
                 .queryParam("q", q)
-                .queryParam("limit", Math.min(Math.max(limit, 1), 50))
+                .queryParam("limit", Math.min(Math.max(limit, 1), 200))
                 .encode(StandardCharsets.UTF_8)
                 .build()
                 .toUri();
-        HttpHeaders headers = new HttpHeaders();
-        if (auth != null && !auth.isBlank()) {
-            headers.set("Authorization", auth.startsWith("Bearer ") ? auth : "Bearer " + auth);
-        }
-        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        // User Service allows unauthenticated GET /api/users/search (public directory); auth is enforced above.
+        HttpEntity<Void> entity = new HttpEntity<>(new HttpHeaders());
         try {
             ResponseEntity<List<UserPublicDto>> response = restTemplate.exchange(
                     uri,
@@ -70,8 +72,18 @@ public class PeopleController {
                     new ParameterizedTypeReference<List<UserPublicDto>>() {});
             List<UserPublicDto> body = response.getBody();
             return ResponseEntity.ok(body != null ? body : Collections.emptyList());
+        } catch (HttpStatusCodeException e) {
+            log.warn("User-service people search failed: {} {}", e.getStatusCode(), e.getResponseBodyAsString());
+            if (e.getStatusCode() == HttpStatus.UNAUTHORIZED) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            if (e.getStatusCode() == HttpStatus.FORBIDDEN) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
         } catch (Exception e) {
-            return ResponseEntity.ok(Collections.emptyList());
+            log.warn("User-service people search failed", e);
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
         }
     }
 
@@ -87,11 +99,7 @@ public class PeopleController {
                 .encode(StandardCharsets.UTF_8)
                 .buildAndExpand(username)
                 .toUri();
-        HttpHeaders headers = new HttpHeaders();
-        if (auth != null && !auth.isBlank()) {
-            headers.set("Authorization", auth.startsWith("Bearer ") ? auth : "Bearer " + auth);
-        }
-        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        HttpEntity<Void> entity = new HttpEntity<>(new HttpHeaders());
         try {
             ResponseEntity<UserPublicDto> response = restTemplate.exchange(
                     uri,
