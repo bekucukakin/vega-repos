@@ -8,8 +8,10 @@
 *.log
 logs/
 
+# Maven (tüm modüller)
+target/
+
 # Java / Spring Backend
-vega-repos-backend/target/
 vega-repos-backend/.classpath
 vega-repos-backend/.project
 vega-repos-backend/.settings/
