@@ -292,8 +292,9 @@
 .diffContent > div { white-space: pre; }
 .diffAdd  { color: var(--success); background: rgba(34,197,94,0.08); }
 .diffDel  { color: var(--error);   background: rgba(239,68,68,0.08); }
-.diffHunk { color: var(--accent);  background: rgba(99,179,237,0.08); }
+.diffHunk { color: var(--accent);  background: rgba(14,165,233,0.06); }
 .diffContext { color: var(--text-secondary); }
+.diffFileInfo { color: var(--text-tertiary); background: transparent; }
 
 /* ── Insights ── */
 .insightsSection {

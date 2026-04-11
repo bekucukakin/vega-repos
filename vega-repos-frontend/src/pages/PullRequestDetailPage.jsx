@@ -295,9 +295,10 @@ export default function PullRequestDetailPage() {
                           <div
                             key={i}
                             className={
+                              line.startsWith('---') || line.startsWith('+++') ? styles.diffFileInfo :
+                              line.startsWith('@@') ? styles.diffHunk :
                               line.startsWith('+') ? styles.diffAdd :
                               line.startsWith('-') ? styles.diffDel :
-                              line.startsWith('@@') ? styles.diffHunk :
                               styles.diffContext
                             }
                           >

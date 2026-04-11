@@ -8,7 +8,7 @@ import styles from './RepoDetailPage.module.css'
 const API_BASE = '/api'
 
 const BRANCH_COLORS = [
-  'var(--accent)',
+  '#0ea5e9',
   '#22c55e',
   '#f59e0b',
   '#a855f7',
@@ -16,62 +16,104 @@ const BRANCH_COLORS = [
   '#06b6d4',
   '#ef4444',
   '#8b5cf6',
+  '#10b981',
+  '#f97316',
 ]
 
 function buildGraphLayout(commits) {
   if (!commits || commits.length === 0) return []
 
-  const lanes = []
-  const laneForHash = new Map()
+  // Assign colors to known branches
   const branchColorMap = new Map()
-  const lastColorForLane = new Map()
   let colorIdx = 0
-
   commits.forEach((c) => {
-    if (c.branches) {
-      c.branches.forEach((b) => {
-        if (!branchColorMap.has(b)) {
-          branchColorMap.set(b, BRANCH_COLORS[colorIdx % BRANCH_COLORS.length])
-          colorIdx++
-        }
-      })
-    }
+    ;(c.branches || []).forEach((b) => {
+      if (!branchColorMap.has(b)) {
+        branchColorMap.set(b, BRANCH_COLORS[colorIdx++ % BRANCH_COLORS.length])
+      }
+    })
   })
 
-  const result = commits.map((c) => {
-    let col = laneForHash.get(c.fullHash)
-    if (col === undefined) {
-      col = lanes.indexOf(null)
-      if (col === -1) {
-        col = lanes.length
-        lanes.push(null)
-      }
-    }
-    lanes[col] = c.parentHash || null
+  // lanes[col] = hash expected in this lane (null = free)
+  const lanes = []
+  const hashToLane = new Map()
+  const laneColorArr = []
 
+  const result = commits.map((c) => {
+    // Snapshot lane state BEFORE processing this commit
+    const activeLanesBefore = [...lanes]
+    const laneColorsBefore = [...laneColorArr]
+
+    // Find or assign this commit's column
+    const wasPreAssigned = hashToLane.has(c.fullHash)
+    let col
+    if (wasPreAssigned) {
+      col = hashToLane.get(c.fullHash)
+    } else {
+      col = lanes.indexOf(null)
+      if (col === -1) { col = lanes.length; lanes.push(null); laneColorArr.push(null) }
+    }
+
+    // Determine color
+    let color
+    if (c.branches?.length > 0) {
+      color = branchColorMap.get(c.branches[0]) || BRANCH_COLORS[col % BRANCH_COLORS.length]
+    } else {
+      color = laneColorArr[col] || BRANCH_COLORS[col % BRANCH_COLORS.length]
+    }
+    laneColorArr[col] = color
+
+    // Free this lane slot (commit has arrived)
+    lanes[col] = null
+    hashToLane.delete(c.fullHash)
+
+    // Get parent hashes (p2 = second parent for merge commits)
+    const p1 = c.parentHash || null
+    const p2 = c.secondParentHash || c.mergeParentHash ||
+      (Array.isArray(c.parentHashes) && c.parentHashes.length > 1 ? c.parentHashes[1] : null)
+
+    // Assign primary parent to a lane
     let parentCol = null
-    if (c.parentHash) {
-      const existingLane = laneForHash.get(c.parentHash)
-      if (existingLane !== undefined) {
-        parentCol = existingLane
+    if (p1) {
+      if (hashToLane.has(p1)) {
+        parentCol = hashToLane.get(p1)
       } else {
-        laneForHash.set(c.parentHash, col)
+        // Continue in the same lane
+        lanes[col] = p1
+        hashToLane.set(p1, col)
         parentCol = col
       }
     }
 
-    let color = 'var(--accent)'
-    if (c.branches && c.branches.length > 0) {
-      color = branchColorMap.get(c.branches[0]) || 'var(--accent)'
-    } else if (lastColorForLane.has(col)) {
-      color = lastColorForLane.get(col)
+    // Assign secondary parent to a lane (merge commit)
+    let secondParentCol = null
+    if (p2) {
+      if (hashToLane.has(p2)) {
+        secondParentCol = hashToLane.get(p2)
+      } else {
+        let newCol = lanes.indexOf(null)
+        if (newCol === -1) { newCol = lanes.length; lanes.push(null); laneColorArr.push(null) }
+        lanes[newCol] = p2
+        hashToLane.set(p2, newCol)
+        laneColorArr[newCol] = color
+        secondParentCol = newCol
+      }
     }
-    lastColorForLane.set(col, color)
 
-    return { ...c, col, parentCol, color, totalLanes: lanes.length }
+    return {
+      ...c,
+      col,
+      parentCol,
+      secondParentCol,
+      color,
+      isMerge: !!p2,
+      hasLineAbove: wasPreAssigned,
+      activeLanesBefore,
+      laneColorsBefore,
+    }
   })
 
-  const maxLanes = lanes.length || 1
+  const maxLanes = Math.max(lanes.length, 1)
   return result.map((r) => ({ ...r, totalLanes: maxLanes }))
 }
 
@@ -511,60 +553,67 @@ export default function RepoDetailPage() {
             <p className={styles.empty}>No commits</p>
           ) : (
             <div className={styles.graphContainer}>
-              {graphCommits.map((c, idx) => {
-                const ROW_H = 60
-                const COL_W = 24
-                const graphW = (c.totalLanes + 1) * COL_W
+              {graphCommits.map((c) => {
+                const ROW_H = 56
+                const COL_W = 26
+                const R = 5.5
+                const graphW = Math.max(c.totalLanes * COL_W + COL_W, 56)
                 const cx = c.col * COL_W + COL_W / 2
                 const cy = ROW_H / 2
 
-                const parentIdx = c.parentHash ? graphCommits.findIndex(p => p.fullHash === c.parentHash) : -1
-                const hasChildAbove = idx > 0 && graphCommits[idx - 1].parentHash === c.fullHash
-                const hasParentBelow = parentIdx >= 0 && parentIdx > idx
-
-                let lineUp = null
-                if (hasChildAbove) {
-                  lineUp = (
-                    <line x1={cx} y1={0} x2={cx} y2={cy - 6} stroke={c.color} strokeWidth="2" opacity="0.7" />
-                  )
+                // Pass-through vertical lines for other active lanes
+                const passLines = []
+                if (c.activeLanesBefore) {
+                  c.activeLanesBefore.forEach((hash, lane) => {
+                    if (!hash || lane === c.col) return
+                    const lx = lane * COL_W + COL_W / 2
+                    const passColor = c.laneColorsBefore?.[lane] || 'var(--border-default)'
+                    passLines.push(
+                      <line key={`pass-${lane}`} x1={lx} y1={0} x2={lx} y2={ROW_H}
+                        stroke={passColor} strokeWidth="2" opacity="0.4" />
+                    )
+                  })
                 }
 
+                // Line UP: straight vertical from row top to circle
+                const lineUp = c.hasLineAbove ? (
+                  <line x1={cx} y1={0} x2={cx} y2={cy - R - 1}
+                    stroke={c.color} strokeWidth="2" />
+                ) : null
+
+                // Line DOWN: from circle to row bottom, bezier for cross-lane
                 let lineDown = null
-                if (hasParentBelow) {
-                  const parent = graphCommits[parentIdx]
-                  const px = parent.col * COL_W + COL_W / 2
-                  if (c.col === parent.col) {
+                if (c.parentCol !== null) {
+                  const px = c.parentCol * COL_W + COL_W / 2
+                  if (px === cx) {
                     lineDown = (
-                      <line x1={cx} y1={cy + 6} x2={cx} y2={ROW_H} stroke={c.color} strokeWidth="2" opacity="0.7" />
+                      <line x1={cx} y1={cy + R + 1} x2={cx} y2={ROW_H}
+                        stroke={c.color} strokeWidth="2" />
                     )
                   } else {
+                    const cpY = cy + R + 1 + (ROW_H - cy - R - 1) * 0.5
                     lineDown = (
                       <path
-                        d={`M ${cx} ${cy + 6} L ${cx} ${ROW_H} L ${px} ${ROW_H}`}
-                        stroke={c.color} strokeWidth="2" fill="none" opacity="0.7"
+                        d={`M ${cx} ${cy + R + 1} C ${cx} ${cpY} ${px} ${cpY} ${px} ${ROW_H}`}
+                        stroke={c.color} strokeWidth="2.5" fill="none"
                       />
                     )
                   }
                 }
 
-                const verticalLines = []
-                for (let lane = 0; lane < c.totalLanes; lane++) {
-                  if (lane === c.col) continue
-                  const hasActive = graphCommits.some((gc, gi) => {
-                    if (gi <= idx) return false
-                    return gc.col === lane && gi > idx
-                  }) && graphCommits.some((gc, gi) => {
-                    if (gi >= idx) return false
-                    return gc.col === lane
-                  })
-                  if (hasActive) {
-                    const lx = lane * COL_W + COL_W / 2
-                    const passColor = graphCommits.find((gc, gi) => gi < idx && gc.col === lane)?.color || 'var(--border-default)'
-                    verticalLines.push(
-                      <line key={`pass-${lane}`} x1={lx} y1={0} x2={lx} y2={ROW_H}
-                        stroke={passColor} strokeWidth="2" opacity="0.25" strokeDasharray="3,3" />
-                    )
-                  }
+                // MERGE line: from circle to secondary parent column (bezier)
+                let mergeLine = null
+                if (c.secondParentCol !== null) {
+                  const spx = c.secondParentCol * COL_W + COL_W / 2
+                  const cpY = cy + R + 1 + (ROW_H - cy - R - 1) * 0.5
+                  const mergeColor = c.laneColorsBefore?.[c.secondParentCol] ||
+                    BRANCH_COLORS[c.secondParentCol % BRANCH_COLORS.length]
+                  mergeLine = (
+                    <path
+                      d={`M ${cx} ${cy + R + 1} C ${cx} ${cpY} ${spx} ${cpY} ${spx} ${ROW_H}`}
+                      stroke={mergeColor} strokeWidth="2.5" fill="none"
+                    />
+                  )
                 }
 
                 return (
@@ -577,21 +626,26 @@ export default function RepoDetailPage() {
                     tabIndex={0}
                     style={{ height: ROW_H }}
                   >
-                    <svg className={styles.graphSvg} width={graphW} height={ROW_H} style={{minWidth: graphW}}>
-                      {verticalLines}
-                      {lineUp}
+                    <svg className={styles.graphSvg} width={graphW} height={ROW_H} style={{ minWidth: graphW }}>
+                      {passLines}
                       {lineDown}
-                      <circle cx={cx} cy={cy} r={5} fill={c.color} />
+                      {mergeLine}
+                      {lineUp}
+                      {c.isMerge && (
+                        <circle cx={cx} cy={cy} r={R + 4} fill="none" stroke={c.color} strokeWidth="1.5" opacity="0.4" />
+                      )}
+                      <circle cx={cx} cy={cy} r={R} fill={c.color} />
                       {!c.parentHash && (
-                        <circle cx={cx} cy={cy} r={8} fill="none" stroke={c.color} strokeWidth="1.5" opacity="0.5" />
+                        <circle cx={cx} cy={cy} r={R + 3} fill="none" stroke={c.color} strokeWidth="1.5" opacity="0.5" />
                       )}
                     </svg>
                     <div className={styles.graphInfo}>
                       <div className={styles.graphMsgRow}>
                         <span className={styles.message}>{c.message || '(no message)'}</span>
                         {c.aiGenerated && <span className={styles.vegaBadge} title="VEGA AI generated">VEGA</span>}
+                        {c.isMerge && <span className={styles.mergeBadge}>Merge PR</span>}
                         {c.branches && c.branches.map((b) => (
-                          <span key={b} className={styles.graphBranchTag} style={{borderColor: c.color, color: c.color}}>
+                          <span key={b} className={styles.graphBranchTag} style={{ borderColor: c.color, color: c.color }}>
                             {b}
                           </span>
                         ))}
@@ -630,7 +684,16 @@ export default function RepoDetailPage() {
                           {f.unifiedDiff && (
                             <div className={styles.diffContent}>
                               {f.unifiedDiff.split('\n').map((line, i) => (
-                                <div key={i} className={line.startsWith('+') ? styles.diffAdd : line.startsWith('-') ? styles.diffDel : styles.diffContext}>
+                                <div
+                                  key={i}
+                                  className={
+                                    line.startsWith('---') || line.startsWith('+++') ? styles.diffFileInfo :
+                                    line.startsWith('@@') ? styles.diffHunk :
+                                    line.startsWith('+') ? styles.diffAdd :
+                                    line.startsWith('-') ? styles.diffDel :
+                                    styles.diffContext
+                                  }
+                                >
                                   {line}
                                 </div>
                               ))}

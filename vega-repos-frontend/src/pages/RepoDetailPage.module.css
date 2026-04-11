@@ -572,8 +572,29 @@
   background: var(--error-muted);
 }
 
+.diffHunk {
+  color: var(--accent);
+  background: rgba(14, 165, 233, 0.06);
+}
+
+.diffFileInfo {
+  color: var(--text-tertiary);
+  background: transparent;
+}
+
 .diffContext {
   color: var(--text-secondary);
+}
+
+.mergeBadge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.03em;
 }
 
 .prLink {
