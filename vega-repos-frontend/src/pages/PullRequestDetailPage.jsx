@@ -17,6 +17,64 @@ function RiskBadge({ level }) {
   return <span className={`${styles.riskBadge} ${cls}`}>{level}</span>
 }
 
+const PR_TYPE_META = {
+  BUG_FIX:       { label: 'Bug Fix',       color: '#f97316' },
+  HOTFIX:        { label: 'Hotfix',        color: '#ef4444' },
+  NEW_FEATURE:   { label: 'New Feature',   color: '#6366f1' },
+  REFACTOR:      { label: 'Refactor',      color: '#8b5cf6' },
+  PERFORMANCE:   { label: 'Performance',   color: '#eab308' },
+  SECURITY:      { label: 'Security',      color: '#dc2626' },
+  DOCUMENTATION: { label: 'Documentation', color: '#22c55e' },
+  CHORE:         { label: 'Chore',         color: '#6b7280' },
+}
+
+function PrTypeBadge({ type }) {
+  if (!type) return null
+  const meta = PR_TYPE_META[type] || { label: type.replace(/_/g, ' '), color: '#6b7280' }
+  return (
+    <span className={styles.prTypeBadge} style={{ borderColor: meta.color + '55', color: meta.color }}>
+      <span className={styles.prTypeDot} style={{ background: meta.color }} />
+      {meta.label}
+    </span>
+  )
+}
+
+function MetricRow({ tag, label, value, detail, warn, statusText }) {
+  return (
+    <div className={`${styles.metricRow} ${warn ? styles.metricRowWarn : ''}`}>
+      <span className={styles.metricTag}>{tag}</span>
+      <div className={styles.metricBody}>
+        <span className={styles.metricName}>{label}</span>
+        <span className={styles.metricDetail}>{detail}</span>
+      </div>
+      <div className={styles.metricRight}>
+        <span className={styles.metricValue}>{value}</span>
+        <span className={styles.metricStatus} data-warn={warn}>{statusText}</span>
+      </div>
+    </div>
+  )
+}
+
+function parseTreeNode(s) {
+  const parts = s.split(':::')
+  return {
+    icon: parts[0] || '•',
+    metric: parts[1] || '',
+    delta: parseInt(parts[2]) || 0,
+    reason: parts[3] || '',
+  }
+}
+
+function parseAiFinding(s) {
+  const parts = s.split(':::')
+  return {
+    severity: parts[0] || 'MEDIUM',
+    category: parts[1] || 'CODE_QUALITY',
+    description: parts[2] || '',
+    delta: parseInt(parts[3]) || 0,
+  }
+}
+
 function StatusBadge({ status }) {
   const map = {
     OPEN: styles.statusOpen,
@@ -158,6 +216,7 @@ export default function PullRequestDetailPage() {
               <span>by <strong>{pr.author}</strong></span>
               <span className={styles.metaDot}>·</span>
               <span>{formatDate(pr.createdTimestamp)}</span>
+              {pr.prType && <><span className={styles.metaDot}>·</span><PrTypeBadge type={pr.prType} /></>}
             </div>
 
             {/* Conflict warning */}
@@ -316,9 +375,25 @@ export default function PullRequestDetailPage() {
           {/* Insights tab */}
           {activeTab === 'insights' && (
             <div className={styles.insightsSection}>
-              {/* VEGA rule-based analysis */}
+              {/* ── Risk Overview ── */}
               <div className={styles.insightsBlock}>
-                <h3>VEGA Rule-Based Analysis</h3>
+                <div className={styles.riskScoreHeader}>
+                  <div>
+                    <h3>Risk Analysis</h3>
+                    <p className={styles.riskScoreSubtitle}>
+                      9 metrics · computed at PR creation
+                      {pr.prType && <> · <span className={styles.prTypeInline}>{pr.prType.replace(/_/g, ' ')}</span></>}
+                    </p>
+                  </div>
+                  {pr.riskScore != null && (
+                    <div className={styles.riskScoreBadge} data-level={pr.riskLevel}>
+                      <span className={styles.riskScoreNum}>{pr.riskScore}</span>
+                      <span className={styles.riskScoreLabel}>{pr.riskLevel}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Core stats */}
                 {pr.summaryFilesChanged != null ? (
                   <div className={styles.statsGrid}>
                     <div className={styles.statCard}>
@@ -334,36 +409,162 @@ export default function PullRequestDetailPage() {
                       <span className={styles.statLabel}>Lines Removed</span>
                     </div>
                     <div className={styles.statCard}>
-                      <span className={styles.statNum}><RiskBadge level={pr.riskLevel} /></span>
-                      <span className={styles.statLabel}>Risk Level</span>
+                      <span className={styles.statNum}>{pr.testCoveragePercent != null ? `${pr.testCoveragePercent}%` : '—'}</span>
+                      <span className={styles.statLabel}>Test Coverage</span>
                     </div>
                   </div>
                 ) : (
-                  <p className={styles.empty}>No rule-based analysis data. Create PR from UI for analysis.</p>
+                  <p className={styles.empty}>No analysis data. Create PR from UI for full analysis.</p>
                 )}
-                {pr.riskReasons && pr.riskReasons.length > 0 && (
-                  <div className={styles.reasonsBlock}>
-                    <h4>Risk Reasons</h4>
-                    <ul>{pr.riskReasons.map((r, i) => <li key={i}>{r}</li>)}</ul>
+
+                {/* ── Metric Table ── */}
+                {pr.riskScore != null && (
+                  <div className={styles.metricTable}>
+                    <MetricRow
+                      tag="AGE" label="File Age"
+                      value={pr.fileAgeDaysMax != null ? `Max ${pr.fileAgeDaysMax}d` : 'N/A'}
+                      detail={pr.staleFiles?.length > 0 ? `${pr.staleFiles.length} stale file${pr.staleFiles.length > 1 ? 's' : ''}` : 'No stale files'}
+                      warn={pr.staleFiles?.length > 0}
+                      statusText={pr.staleFiles?.length > 0 ? 'STALE' : 'OK'}
+                    />
+                    <MetricRow
+                      tag="COVERAGE" label="Test Coverage"
+                      value={pr.testCoveragePercent != null ? `${pr.testCoveragePercent}%` : 'N/A'}
+                      detail="of changed source files have tests"
+                      warn={pr.testCoveragePercent != null && pr.testCoveragePercent < 30}
+                      statusText={pr.testCoveragePercent != null && pr.testCoveragePercent < 30 ? 'LOW' : 'OK'}
+                    />
+                    <MetricRow
+                      tag="SECURITY" label="Security Sensitivity"
+                      value={pr.criticalPatternFiles?.length > 0 ? `${pr.criticalPatternFiles.length} sensitive file${pr.criticalPatternFiles.length > 1 ? 's' : ''}` : 'None detected'}
+                      detail={pr.criticalPatternFiles?.slice(0, 2).join(', ') || 'No auth/secret/key paths'}
+                      warn={pr.criticalPatternFiles?.length > 0}
+                      statusText={pr.criticalPatternFiles?.length > 0 ? 'WARN' : 'OK'}
+                    />
+                    <MetricRow
+                      tag="CONFLICTS" label="Merge Conflicts"
+                      value={pr.hasConflicts ? `${pr.conflictedFiles?.length ?? 0} conflict${(pr.conflictedFiles?.length ?? 0) !== 1 ? 's' : ''}` : 'Clean'}
+                      detail={pr.hasConflicts ? '3-way merge check detected issues' : 'No 3-way merge conflicts'}
+                      warn={pr.hasConflicts}
+                      statusText={pr.hasConflicts ? 'CONFLICT' : 'OK'}
+                    />
+                    <MetricRow
+                      tag="CHURN" label="Change Concentration"
+                      value={pr.changeConcentration != null ? `${pr.changeConcentration.toFixed(0)} lines/file` : 'N/A'}
+                      detail={pr.changeConcentration > 150 ? 'Deep, concentrated change' : 'Focused change'}
+                      warn={pr.changeConcentration > 150}
+                      statusText={pr.changeConcentration > 150 ? 'HIGH' : 'OK'}
+                    />
+                    <MetricRow
+                      tag="AUTHORS" label="Author Diversity"
+                      value={pr.authorDiversityCount != null ? `${pr.authorDiversityCount} author${pr.authorDiversityCount !== 1 ? 's' : ''} in history` : 'N/A'}
+                      detail={pr.authorDiversityCount === 1 ? 'Knowledge concentration — bus-factor risk' : pr.authorDiversityCount >= 5 ? 'High coordination complexity' : 'Healthy distribution'}
+                      warn={pr.authorDiversityCount === 1 || pr.authorDiversityCount >= 5}
+                      statusText={pr.authorDiversityCount === 1 || pr.authorDiversityCount >= 5 ? 'WARN' : 'OK'}
+                    />
+                    <MetricRow
+                      tag="FAMILIARITY" label="First-Time Files"
+                      value={pr.firstTimeFiles?.length > 0 ? `${pr.firstTimeFiles.length} unfamiliar file${pr.firstTimeFiles.length > 1 ? 's' : ''}` : 'Author has prior history'}
+                      detail={pr.firstTimeFiles?.length > 0 ? 'Author has no prior commits in these files' : 'Familiar territory for this author'}
+                      warn={pr.firstTimeFiles?.length > 0}
+                      statusText={pr.firstTimeFiles?.length > 0 ? 'WARN' : 'OK'}
+                    />
+                    <MetricRow
+                      tag="HOTSPOTS" label="Hotspot Files"
+                      value={pr.hotspotFiles?.length > 0 ? `${pr.hotspotFiles.length} hotspot${pr.hotspotFiles.length > 1 ? 's' : ''} detected` : 'None detected'}
+                      detail={pr.hotspotFiles?.length > 0 ? 'Changed 6+ times recently — potentially unstable' : 'No high-churn files in this change'}
+                      warn={pr.hotspotFiles?.length > 0}
+                      statusText={pr.hotspotFiles?.length > 0 ? 'WARN' : 'OK'}
+                    />
                   </div>
                 )}
+
+                {/* ── Score Breakdown ── */}
+                {pr.analysisTree && pr.analysisTree.length > 0 && (
+                  <div className={styles.reasonsBlock}>
+                    <h4>Score Breakdown</h4>
+                    <p className={styles.treeSubtitle}>
+                      How each metric contributed to the final score of <strong>{pr.riskScore}</strong>
+                    </p>
+                    <div className={styles.analysisTree}>
+                      {pr.analysisTree.map((nodeStr, i) => {
+                        const node = parseTreeNode(nodeStr)
+                        const isPositive = node.delta > 0
+                        const isNegative = node.delta < 0
+                        return (
+                          <div key={i} className={`${styles.treeNode} ${isPositive ? styles.treeNodeWarn : isNegative ? styles.treeNodeGood : styles.treeNodeNeutral}`}>
+                            <div className={styles.treeNodeLeft}>
+                              <span className={styles.treeIndicator} data-sign={isPositive ? 'pos' : isNegative ? 'neg' : 'zero'} />
+                              <div className={styles.treeNodeBody}>
+                                <span className={styles.treeMetric}>{node.metric}</span>
+                                <span className={styles.treeReason}>{node.reason}</span>
+                              </div>
+                            </div>
+                            <span className={`${styles.treeDelta} ${isPositive ? styles.treeDeltaPos : isNegative ? styles.treeDeltaNeg : styles.treeDeltaZero}`}>
+                              {isPositive ? '+' : ''}{node.delta}
+                            </span>
+                          </div>
+                        )
+                      })}
+                      <div className={styles.treeTotal}>
+                        <span>Total Risk Score</span>
+                        <span className={styles.treeTotalScore} data-level={pr.riskLevel}>{pr.riskScore}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── AI Findings (from PR creation) ── */}
+                {pr.aiFindings && pr.aiFindings.length > 0 && (
+                  <div className={styles.reasonsBlock}>
+                    <h4>AI Review — Gemini Findings</h4>
+                    {pr.aiScoreDelta > 0 && (
+                      <p className={styles.treeSubtitle}>Added +{pr.aiScoreDelta} to the risk score</p>
+                    )}
+                    <div className={styles.aiFindingsGrid}>
+                      {pr.aiFindings.map((findingStr, i) => {
+                        const f = parseAiFinding(findingStr)
+                        const sevCls = f.severity === 'HIGH' ? styles.findingHigh : f.severity === 'LOW' ? styles.findingLow : styles.findingMedium
+                        return (
+                          <div key={i} className={`${styles.findingCard} ${sevCls}`}>
+                            <div className={styles.findingHeader}>
+                              <span className={styles.findingSev}>{f.severity}</span>
+                              <span className={styles.findingCat}>{f.category.replace(/_/g, ' ')}</span>
+                              {f.delta > 0 && <span className={styles.findingDelta}>+{f.delta}</span>}
+                            </div>
+                            <p className={styles.findingDesc}>{f.description}</p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Recommendations ── */}
                 {pr.riskRecommendations && pr.riskRecommendations.length > 0 && (
                   <div className={styles.reasonsBlock}>
                     <h4>Recommendations</h4>
-                    <ul>{pr.riskRecommendations.map((r, i) => <li key={i}>{r}</li>)}</ul>
+                    <ul className={styles.reasonsList}>
+                      {pr.riskRecommendations.map((rec, i) => (
+                        <li key={i} className={styles.reasonItem}>
+                          <span className={styles.recDot} />
+                          {rec}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
               </div>
 
-              {/* AI analysis */}
+              {/* ── On-demand AI Analysis ── */}
               <div className={styles.insightsBlock}>
-                <h3>AI Analysis (Google Gemini)</h3>
+                <h3>On-Demand AI Review</h3>
                 {aiLoading && <p className={styles.loading}>Running Gemini analysis...</p>}
                 {!aiLoading && !aiAnalysis && !aiError && (
                   <p className={styles.empty}>
-                    No AI analysis yet.{' '}
+                    Trigger a fresh review at any time.{' '}
                     <button type="button" onClick={handleAiAnalysis} className={styles.inlineBtn}>
-                      Run AI Analysis
+                      Run Analysis
                     </button>
                   </p>
                 )}
@@ -378,14 +579,28 @@ export default function PullRequestDetailPage() {
                     )}
                     {aiAnalysis.explanation && (
                       <div className={styles.aiBlock}>
-                        <h4>Detailed Explanation</h4>
+                        <h4>Explanation</h4>
                         <p className={styles.aiText}>{aiAnalysis.explanation}</p>
                       </div>
                     )}
-                    {aiAnalysis.suggestions && aiAnalysis.suggestions.length > 0 && (
+                    {aiAnalysis.findings && aiAnalysis.findings.length > 0 && (
                       <div className={styles.aiBlock}>
-                        <h4>AI Suggestions</h4>
-                        <ul>{aiAnalysis.suggestions.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                        <h4>Findings</h4>
+                        <div className={styles.aiFindingsGrid}>
+                          {aiAnalysis.findings.map((findingStr, i) => {
+                            const f = parseAiFinding(findingStr)
+                            const sevCls = f.severity === 'HIGH' ? styles.findingHigh : f.severity === 'LOW' ? styles.findingLow : styles.findingMedium
+                            return (
+                              <div key={i} className={`${styles.findingCard} ${sevCls}`}>
+                                <div className={styles.findingHeader}>
+                                  <span className={styles.findingSev}>{f.severity}</span>
+                                  <span className={styles.findingCat}>{f.category.replace(/_/g, ' ')}</span>
+                                </div>
+                                <p className={styles.findingDesc}>{f.description}</p>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -429,29 +644,70 @@ export default function PullRequestDetailPage() {
 
         {/* Sidebar */}
         <aside className={styles.sidebar}>
+          {/* PR Type block */}
+          {pr.prType && (
+            <div className={styles.sidebarBlock}>
+              <h3>PR Type</h3>
+              <PrTypeBadge type={pr.prType} />
+            </div>
+          )}
+
           {/* Stats block */}
           {pr.summaryFilesChanged != null && (
             <div className={styles.sidebarBlock}>
               <h3>PR Stats</h3>
-              <p className={styles.summaryStats}>
-                {pr.summaryFilesChanged} files changed
-              </p>
+              <p className={styles.summaryStats}>{pr.summaryFilesChanged} files changed</p>
               <p>
                 <span className={styles.linesAdded}>+{pr.summaryLinesAdded ?? 0}</span>
                 {' / '}
                 <span className={styles.linesRemoved}>-{pr.summaryLinesRemoved ?? 0}</span>
               </p>
               {pr.riskLevel && (
-                <p>Risk: <RiskBadge level={pr.riskLevel} /></p>
+                <p style={{marginTop:'var(--space-2)'}}>
+                  Risk: <RiskBadge level={pr.riskLevel} />
+                  {pr.riskScore != null && (
+                    <span style={{marginLeft:'var(--space-2)', fontSize:'0.75rem', color:'var(--text-tertiary)'}}>
+                      (score: {pr.riskScore})
+                    </span>
+                  )}
+                </p>
               )}
-              <span className={styles.vegaHint}>VEGA rule-based</span>
+              {pr.riskScore != null && (
+                <div className={styles.sidebarMiniStats}>
+                  {pr.fileAgeDaysMax > 0 && (
+                    <div className={styles.sidebarMiniRow}>
+                      <span>File age</span>
+                      <span>{pr.fileAgeDaysMax}d max</span>
+                    </div>
+                  )}
+                  {pr.authorDiversityCount != null && (
+                    <div className={styles.sidebarMiniRow}>
+                      <span>Authors</span>
+                      <span>{pr.authorDiversityCount}</span>
+                    </div>
+                  )}
+                  {pr.testCoveragePercent != null && (
+                    <div className={styles.sidebarMiniRow}>
+                      <span>Test coverage</span>
+                      <span>{pr.testCoveragePercent}%</span>
+                    </div>
+                  )}
+                  {pr.aiScoreDelta > 0 && (
+                    <div className={styles.sidebarMiniRow}>
+                      <span>AI contribution</span>
+                      <span>+{pr.aiScoreDelta} pts</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              <span className={styles.vegaHint}>9 metrics + Gemini AI</span>
             </div>
           )}
 
           {/* Conflict summary in sidebar */}
           {pr.hasConflicts && (
             <div className={`${styles.sidebarBlock} ${styles.sidebarConflict}`}>
-              <h3>⚠ Conflicts</h3>
+              <h3>Conflicts</h3>
               <p>{pr.conflictedFiles?.length ?? '?'} file(s) conflicted</p>
               {pr.conflictedFiles?.slice(0, 4).map((f, i) => (
                 <p key={i} className={styles.conflictFileSm}><code>{f}</code></p>

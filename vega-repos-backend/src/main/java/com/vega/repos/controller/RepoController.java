@@ -176,6 +176,7 @@ public class RepoController {
         String sourceBranch = body.get("sourceBranch");
         String targetBranch = body.get("targetBranch");
         String description = body.getOrDefault("description", "");
+        String prType = body.get("prType"); // optional — BUG_FIX, HOTFIX, NEW_FEATURE, etc.
         if (sourceBranch == null || sourceBranch.isBlank() || targetBranch == null || targetBranch.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "sourceBranch and targetBranch are required"));
         }
@@ -183,7 +184,7 @@ public class RepoController {
             return ResponseEntity.badRequest().body(Map.of("error", "Source and target branches must be different"));
         }
         try {
-            PrDto pr = repoService.createPullRequest(username, repoName, sourceBranch, targetBranch, currentUser, description);
+            PrDto pr = repoService.createPullRequest(username, repoName, sourceBranch, targetBranch, currentUser, description, prType);
             return ResponseEntity.status(HttpStatus.CREATED).body(pr);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

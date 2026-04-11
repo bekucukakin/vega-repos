@@ -43,6 +43,9 @@ public class RepoService {
     @Value("${hdfs.base-path:/vega/repositories}")
     private String basePath;
 
+    @Value("${vega.agent-service.url:http://localhost:8084}")
+    private String agentServiceUrl;
+
     public RepoService(FileSystem fileSystem, RepoCollaboratorRepository collaboratorRepository,
                        RepoSettingsRepository repoSettingsRepository) {
         this.fileSystem = fileSystem;
@@ -491,14 +494,119 @@ public class RepoService {
         }
         String oldStr = new String(oldBytes, StandardCharsets.UTF_8);
         String newStr = new String(newBytes, StandardCharsets.UTF_8);
+        String[] oldLines = oldStr.split("\n", -1);
+        String[] newLines = newStr.split("\n", -1);
+        return computeUnifiedDiff(oldLines, newLines, path, 3);
+    }
+
+    /**
+     * Computes a proper unified diff using LCS (Longest Common Subsequence).
+     * Unchanged lines appear as context lines (space prefix), not as deletions/insertions.
+     */
+    private String computeUnifiedDiff(String[] a, String[] b, String path, int ctx) {
+        int m = a.length;
+        int n = b.length;
+
+        // For very large files fall back to a simple header-only diff to avoid OOM
+        if ((long) m * n > 3_000_000L) {
+            StringBuilder fb = new StringBuilder();
+            fb.append("--- a/").append(path).append("\n");
+            fb.append("+++ b/").append(path).append("\n");
+            fb.append("@@ -1,").append(m).append(" +1,").append(n).append(" @@\n");
+            for (String line : a) fb.append("-").append(line).append("\n");
+            for (String line : b) fb.append("+").append(line).append("\n");
+            return fb.length() > 50000 ? fb.substring(0, 50000) + "\n... (truncated)" : fb.toString();
+        }
+
+        // LCS dynamic programming table (bottom-up)
+        int[][] dp = new int[m + 1][n + 1];
+        for (int i = m - 1; i >= 0; i--) {
+            for (int j = n - 1; j >= 0; j--) {
+                if (a[i].equals(b[j])) {
+                    dp[i][j] = dp[i + 1][j + 1] + 1;
+                } else {
+                    dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+                }
+            }
+        }
+
+        // Reconstruct edit operations: 'C'=context, 'D'=delete, 'I'=insert
+        List<Character> ops = new ArrayList<>(m + n);
+        List<Integer> aIdx = new ArrayList<>(m + n);
+        List<Integer> bIdx = new ArrayList<>(m + n);
+        int i = 0, j = 0;
+        while (i < m && j < n) {
+            if (a[i].equals(b[j])) {
+                ops.add('C'); aIdx.add(i); bIdx.add(j); i++; j++;
+            } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+                ops.add('D'); aIdx.add(i); bIdx.add(-1); i++;
+            } else {
+                ops.add('I'); aIdx.add(-1); bIdx.add(j); j++;
+            }
+        }
+        while (i < m) { ops.add('D'); aIdx.add(i++); bIdx.add(-1); }
+        while (j < n) { ops.add('I'); aIdx.add(-1); bIdx.add(j++); }
+
+        int total = ops.size();
+
+        // Mark which op indices are "in a hunk" (within ctx of a change)
+        boolean[] inHunk = new boolean[total];
+        for (int k = 0; k < total; k++) {
+            if (ops.get(k) != 'C') {
+                int lo = Math.max(0, k - ctx);
+                int hi = Math.min(total, k + ctx + 1);
+                for (int d = lo; d < hi; d++) inHunk[d] = true;
+            }
+        }
+
         StringBuilder sb = new StringBuilder();
-        for (String line : oldStr.split("\n", -1)) {
-            sb.append("-").append(line).append("\n");
+        sb.append("--- a/").append(path).append("\n");
+        sb.append("+++ b/").append(path).append("\n");
+
+        int k = 0;
+        while (k < total) {
+            if (!inHunk[k]) { k++; continue; }
+
+            // Determine hunk boundaries
+            int hStart = k;
+            while (k < total && inHunk[k]) k++;
+            int hEnd = k;
+
+            // Compute @@ header numbers
+            int oldStart = 1, newStart = 1;
+            for (int h = 0; h < hStart; h++) {
+                char op = ops.get(h);
+                if (op == 'C' || op == 'D') oldStart++;
+                if (op == 'C' || op == 'I') newStart++;
+            }
+            int oldCount = 0, newCount = 0;
+            for (int h = hStart; h < hEnd; h++) {
+                char op = ops.get(h);
+                if (op == 'C' || op == 'D') oldCount++;
+                if (op == 'C' || op == 'I') newCount++;
+            }
+
+            sb.append("@@ -").append(oldStart).append(",").append(oldCount)
+              .append(" +").append(newStart).append(",").append(newCount).append(" @@\n");
+
+            for (int h = hStart; h < hEnd; h++) {
+                char op = ops.get(h);
+                if (op == 'C') {
+                    sb.append(" ").append(a[aIdx.get(h)]).append("\n");
+                } else if (op == 'D') {
+                    sb.append("-").append(a[aIdx.get(h)]).append("\n");
+                } else {
+                    sb.append("+").append(b[bIdx.get(h)]).append("\n");
+                }
+            }
+
+            if (sb.length() > 50000) {
+                sb.append("\n... (truncated)");
+                break;
+            }
         }
-        for (String line : newStr.split("\n", -1)) {
-            sb.append("+").append(line).append("\n");
-        }
-        return sb.length() > 10000 ? sb.substring(0, 10000) + "\n... (truncated)" : sb.toString();
+
+        return sb.toString();
     }
 
     private String readCommitObject(String username, String repoName, String hash) {
@@ -824,6 +932,14 @@ public class RepoService {
 
     private static final ObjectMapper PR_MAPPER = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
+    /** Helper: parse a JSON array field as List<String>, or return null if absent/empty. */
+    private static List<String> parseStringList(JsonNode n, String field) {
+        if (!n.has(field) || !n.get(field).isArray()) return null;
+        List<String> list = new ArrayList<>();
+        n.get(field).forEach(e -> list.add(e.asText()));
+        return list.isEmpty() ? null : list;
+    }
+
     /**
      * Parse a single PR JSON node into PrDto.
      */
@@ -868,6 +984,21 @@ public class RepoService {
                 .mergedBy(n.has("mergedBy") && !n.get("mergedBy").isNull() ? n.get("mergedBy").asText(null) : null)
                 .reviewStartedAt(n.has("reviewStartedAt") && n.get("reviewStartedAt").asLong() > 0 ? n.get("reviewStartedAt").asLong() : null)
                 .reviewCompletedAt(n.has("reviewCompletedAt") && n.get("reviewCompletedAt").asLong() > 0 ? n.get("reviewCompletedAt").asLong() : null)
+                // Enriched risk metric fields (backward-compatible)
+                .riskScore(n.has("riskScore") ? n.get("riskScore").asInt() : null)
+                .fileAgeDaysMax(n.has("fileAgeDaysMax") ? n.get("fileAgeDaysMax").asInt() : null)
+                .fileAgeDaysAvg(n.has("fileAgeDaysAvg") ? n.get("fileAgeDaysAvg").asInt() : null)
+                .staleFiles(parseStringList(n, "staleFiles"))
+                .authorDiversityCount(n.has("authorDiversityCount") ? n.get("authorDiversityCount").asInt() : null)
+                .firstTimeFiles(parseStringList(n, "firstTimeFiles"))
+                .testCoveragePercent(n.has("testCoveragePercent") ? n.get("testCoveragePercent").asInt() : null)
+                .hotspotFiles(parseStringList(n, "hotspotFiles"))
+                .criticalPatternFiles(parseStringList(n, "criticalPatternFiles"))
+                .changeConcentration(n.has("changeConcentration") ? n.get("changeConcentration").asDouble() : null)
+                .prType(n.has("prType") ? n.get("prType").asText(null) : null)
+                .analysisTree(parseStringList(n, "analysisTree"))
+                .aiFindings(parseStringList(n, "aiFindings"))
+                .aiScoreDelta(n.has("aiScoreDelta") ? n.get("aiScoreDelta").asInt() : null)
                 .build();
     }
 
@@ -910,7 +1041,7 @@ public class RepoService {
      */
     public PrDto createPullRequest(String username, String repoName,
                                    String sourceBranch, String targetBranch,
-                                   String author, String description) {
+                                   String author, String description, String prType) {
         // Validate branches
         String sourceCommit = getCommitHashForBranch(username, repoName, sourceBranch);
         String targetCommit = getCommitHashForBranch(username, repoName, targetBranch);
@@ -979,49 +1110,28 @@ public class RepoService {
 
         int totalFilesChanged = changedFiles.size();
 
-        // Risk analysis
-        String riskLevel;
-        List<String> riskReasons = new ArrayList<>();
-        List<String> riskRecommendations = new ArrayList<>();
-
-        if (!conflictedFiles.isEmpty()) {
-            riskLevel = "HIGH";
-            riskReasons.add("Merge conflicts in " + conflictedFiles.size() + " file(s): " +
-                    String.join(", ", conflictedFiles.subList(0, Math.min(3, conflictedFiles.size()))) +
-                    (conflictedFiles.size() > 3 ? " ..." : ""));
-            riskRecommendations.add("Resolve all conflicts before merging");
-            riskRecommendations.add("Use 'vega merge --ai' for AI-assisted conflict resolution");
-        } else if (linesAdded + linesRemoved > 500 || totalFilesChanged > 10) {
-            riskLevel = "HIGH";
-            if (linesAdded + linesRemoved > 500)
-                riskReasons.add("Large change: " + (linesAdded + linesRemoved) + " total lines affected");
-            if (totalFilesChanged > 10)
-                riskReasons.add("Many files changed: " + totalFilesChanged);
-            riskRecommendations.add("Consider splitting into smaller PRs");
-            riskRecommendations.add("Thorough testing required");
-        } else if (linesAdded + linesRemoved > 100 || totalFilesChanged > 5) {
-            riskLevel = "MEDIUM";
-            if (linesAdded + linesRemoved > 100)
-                riskReasons.add("Moderate change: " + (linesAdded + linesRemoved) + " lines affected");
-            if (totalFilesChanged > 5)
-                riskReasons.add("Multiple files changed: " + totalFilesChanged);
-            riskRecommendations.add("Review changes carefully before merging");
-        } else {
-            riskLevel = "LOW";
-            riskReasons.add("Small, focused change (" + totalFilesChanged + " file(s), " + linesAdded + " lines added)");
-        }
+        // ── Enriched Risk Analysis (8 metrics + PR type + AI) ────────────────
+        EnrichedRiskResult risk = computeEnrichedRisk(
+            username, repoName,
+            changedFiles, linesAdded, linesRemoved,
+            !conflictedFiles.isEmpty(), conflictedFiles,
+            targetCommit, author,
+            sourceBlobs.keySet(),
+            prType
+        );
 
         // Get commits in source not in target
         List<String> commitHashes = getCommitsInSource(username, repoName, sourceCommit, targetCommit, 20);
 
         String diffSummary = "Files: " + totalFilesChanged + ", +" + linesAdded + " -" + linesRemoved +
-                (conflictedFiles.isEmpty() ? "" : ", conflicts: " + conflictedFiles.size());
+                (conflictedFiles.isEmpty() ? "" : ", conflicts: " + conflictedFiles.size()) +
+                ", risk-score: " + risk.riskScore;
 
         // Generate PR ID
         String prId = getNextPrId(username, repoName);
         long now = System.currentTimeMillis();
 
-        // Build JSON
+        // Build JSON (all existing + new enriched fields)
         ObjectNode prJson = PR_MAPPER.createObjectNode();
         prJson.put("id", prId);
         prJson.put("author", author);
@@ -1030,6 +1140,7 @@ public class RepoService {
         prJson.put("createdTimestamp", now);
         prJson.put("status", "OPEN");
         if (description != null && !description.isBlank()) prJson.put("description", description);
+        if (prType != null && !prType.isBlank()) prJson.put("prType", prType);
         prJson.put("diffSummary", diffSummary);
         prJson.put("hasConflicts", !conflictedFiles.isEmpty());
         prJson.putPOJO("conflictedFiles", conflictedFiles);
@@ -1037,9 +1148,23 @@ public class RepoService {
         prJson.put("summaryFilesChanged", totalFilesChanged);
         prJson.put("summaryLinesAdded", linesAdded);
         prJson.put("summaryLinesRemoved", linesRemoved);
-        prJson.put("riskLevel", riskLevel);
-        prJson.putPOJO("riskReasons", riskReasons);
-        prJson.putPOJO("riskRecommendations", riskRecommendations);
+        prJson.put("riskLevel", risk.riskLevel);
+        prJson.putPOJO("riskReasons", risk.reasons);
+        prJson.putPOJO("riskRecommendations", risk.recommendations);
+        // Enriched metric fields
+        prJson.put("riskScore", risk.riskScore);
+        prJson.put("fileAgeDaysMax", risk.fileAgeDaysMax);
+        prJson.put("fileAgeDaysAvg", risk.fileAgeDaysAvg);
+        prJson.putPOJO("staleFiles", risk.staleFiles);
+        prJson.put("authorDiversityCount", risk.authorDiversityCount);
+        prJson.putPOJO("firstTimeFiles", risk.firstTimeFiles);
+        prJson.put("testCoveragePercent", risk.testCoveragePercent);
+        prJson.putPOJO("hotspotFiles", risk.hotspotFiles);
+        prJson.putPOJO("criticalPatternFiles", risk.criticalPatternFiles);
+        prJson.put("changeConcentration", risk.changeConcentration);
+        prJson.putPOJO("analysisTree", risk.analysisTree);
+        prJson.putPOJO("aiFindings", risk.aiFindings);
+        prJson.put("aiScoreDelta", risk.aiScoreDelta);
 
         // Save to HDFS
         Path prDir = new Path(basePath + "/" + username + "/" + repoName + "/.pr");
@@ -1070,9 +1195,23 @@ public class RepoService {
                 .summaryFilesChanged(totalFilesChanged)
                 .summaryLinesAdded(linesAdded)
                 .summaryLinesRemoved(linesRemoved)
-                .riskLevel(riskLevel)
-                .riskReasons(riskReasons)
-                .riskRecommendations(riskRecommendations)
+                .riskLevel(risk.riskLevel)
+                .riskReasons(risk.reasons.isEmpty() ? null : risk.reasons)
+                .riskRecommendations(risk.recommendations.isEmpty() ? null : risk.recommendations)
+                .riskScore(risk.riskScore)
+                .fileAgeDaysMax(risk.fileAgeDaysMax)
+                .fileAgeDaysAvg(risk.fileAgeDaysAvg)
+                .staleFiles(risk.staleFiles.isEmpty() ? null : risk.staleFiles)
+                .authorDiversityCount(risk.authorDiversityCount)
+                .firstTimeFiles(risk.firstTimeFiles.isEmpty() ? null : risk.firstTimeFiles)
+                .testCoveragePercent(risk.testCoveragePercent)
+                .hotspotFiles(risk.hotspotFiles.isEmpty() ? null : risk.hotspotFiles)
+                .criticalPatternFiles(risk.criticalPatternFiles.isEmpty() ? null : risk.criticalPatternFiles)
+                .changeConcentration(risk.changeConcentration)
+                .prType(prType)
+                .analysisTree(risk.analysisTree.isEmpty() ? null : risk.analysisTree)
+                .aiFindings(risk.aiFindings.isEmpty() ? null : risk.aiFindings)
+                .aiScoreDelta(risk.aiScoreDelta > 0 ? risk.aiScoreDelta : null)
                 .build();
     }
 
@@ -1156,6 +1295,538 @@ public class RepoService {
         int count = 1;
         for (char c : text.toCharArray()) if (c == '\n') count++;
         return count;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  ENRICHED RISK ANALYSIS — 8 metrics
+    // ═══════════════════════════════════════════════════════════════════
+
+    /** Per-file statistics gathered by walking commit history. */
+    private static class FileHistoryStats {
+        long lastModifiedMs = 0;
+        String lastModifiedAuthor = "";
+        int changeCount = 0;
+        final Set<String> uniqueAuthors = new LinkedHashSet<>();
+        boolean prAuthorTouchedBefore = false;
+    }
+
+    /** Aggregated result of the enriched risk computation. */
+    private static class EnrichedRiskResult {
+        int riskScore = 0;
+        String riskLevel = "LOW";
+        String prType = null;
+        final List<String> reasons = new ArrayList<>();
+        final List<String> recommendations = new ArrayList<>();
+        // Metric fields exposed to callers
+        int fileAgeDaysMax = 0;
+        int fileAgeDaysAvg = 0;
+        final List<String> staleFiles = new ArrayList<>();
+        int authorDiversityCount = 0;
+        final List<String> firstTimeFiles = new ArrayList<>();
+        int testCoveragePercent = 100;
+        final List<String> hotspotFiles = new ArrayList<>();
+        final List<String> criticalPatternFiles = new ArrayList<>();
+        double changeConcentration = 0.0;
+        // Analysis tree: "icon:::metric:::delta:::reason"
+        final List<String> analysisTree = new ArrayList<>();
+        // AI findings: "SEVERITY:::CATEGORY:::description:::scoreDelta"
+        final List<String> aiFindings = new ArrayList<>();
+        int aiScoreDelta = 0;
+    }
+
+    /** PR type metadata for score/icon/description lookup. */
+    private static final Map<String, int[]> PR_TYPE_DELTA = Map.of(
+        "BUG_FIX",       new int[]{10},
+        "HOTFIX",        new int[]{20},
+        "NEW_FEATURE",   new int[]{5},
+        "REFACTOR",      new int[]{12},
+        "PERFORMANCE",   new int[]{5},
+        "SECURITY",      new int[]{20},
+        "DOCUMENTATION", new int[]{-15},
+        "CHORE",         new int[]{-10}
+    );
+    private static final Map<String, String> PR_TYPE_ICON = Map.of(
+        "BUG_FIX",       "🐛",
+        "HOTFIX",        "🚨",
+        "NEW_FEATURE",   "✨",
+        "REFACTOR",      "🔧",
+        "PERFORMANCE",   "⚡",
+        "SECURITY",      "🔒",
+        "DOCUMENTATION", "📝",
+        "CHORE",         "🛠"
+    );
+    private static final Map<String, String> PR_TYPE_REASON = Map.of(
+        "BUG_FIX",       "Bug fix: fixing defects risks introducing regressions in adjacent code",
+        "HOTFIX",        "Hotfix: emergency patches under time pressure have the highest regression risk",
+        "NEW_FEATURE",   "New feature: new code paths are less battle-tested and may have edge cases",
+        "REFACTOR",      "Refactor: restructuring code risks unintentional behavior changes",
+        "PERFORMANCE",   "Performance: optimizations can have unexpected side effects",
+        "SECURITY",      "Security fix: security changes require mandatory expert review",
+        "DOCUMENTATION", "Documentation only: very low risk change",
+        "CHORE",         "Chore/config: routine maintenance with limited functional impact"
+    );
+
+    /** Add a scored node to the analysis tree (does NOT modify riskScore — caller does that). */
+    private static void treeNode(EnrichedRiskResult r, String icon, String metric, int delta, String reason) {
+        r.analysisTree.add(icon + ":::" + metric + ":::" + delta + ":::" + reason);
+    }
+
+    /**
+     * Walk up to {@code maxCommits} from {@code headCommit} (first-parent chain).
+     * For each target file, records when it last changed, how often, and who touched it.
+     */
+    private Map<String, FileHistoryStats> walkFileHistory(
+            String username, String repoName,
+            String headCommit, List<String> targetFiles, String prAuthor, int maxCommits) {
+
+        Map<String, FileHistoryStats> stats = new LinkedHashMap<>();
+        for (String f : targetFiles) stats.put(f, new FileHistoryStats());
+
+        // Build first-parent commit chain
+        // chain[i] = { commitHash, parentHash, author, timestampMs, treeHash }
+        List<String[]> chain = new ArrayList<>();
+        String current = headCommit;
+        Set<String> seen = new HashSet<>();
+
+        for (int i = 0; i < maxCommits && current != null && !seen.contains(current); i++) {
+            seen.add(current);
+            String raw = readCommitObject(username, repoName, current);
+            if (raw == null) break;
+
+            String treeHash = null, parentHash = null, author = "";
+            long ts = 0;
+            for (String line : raw.split("\\r?\\n")) {
+                if (line.startsWith("tree "))   treeHash   = line.substring(5).trim();
+                else if (line.startsWith("parent ")) parentHash = line.substring(7).trim();
+            }
+            Matcher am = Pattern.compile("author\\s+(.+?)\\s+(\\d+)", Pattern.MULTILINE).matcher(raw);
+            if (am.find()) {
+                String af = am.group(1).trim();
+                int ei = af.indexOf(" <");
+                author = ei > 0 ? af.substring(0, ei) : af;
+                try { ts = Long.parseLong(am.group(2)) * 1000L; } catch (Exception ignored) {}
+            }
+            chain.add(new String[]{current, parentHash, author, String.valueOf(ts), treeHash});
+            current = parentHash;
+        }
+
+        // Compare consecutive commits to detect file changes
+        for (int i = 0; i < chain.size(); i++) {
+            String[] curr = chain.get(i);
+            String author    = curr[2];
+            long   ts        = Long.parseLong(curr[3]);
+            String treeHash  = curr[4];
+            String parentTree = (i + 1 < chain.size()) ? chain.get(i + 1)[4] : null;
+
+            for (String file : targetFiles) {
+                String currBlob   = treeHash   != null ? findBlobInTree(username, repoName, treeHash,   file) : null;
+                String parentBlob = parentTree != null ? findBlobInTree(username, repoName, parentTree, file) : null;
+
+                if (currBlob != null && !currBlob.equals(parentBlob)) {
+                    FileHistoryStats s = stats.get(file);
+                    if (s.lastModifiedMs == 0) {
+                        s.lastModifiedMs     = ts;
+                        s.lastModifiedAuthor = author;
+                    }
+                    s.changeCount++;
+                    s.uniqueAuthors.add(author);
+                    if (!author.isEmpty() &&
+                        (author.equalsIgnoreCase(prAuthor) ||
+                         author.toLowerCase().contains(prAuthor.toLowerCase()) ||
+                         prAuthor.toLowerCase().contains(author.toLowerCase()))) {
+                        s.prAuthorTouchedBefore = true;
+                    }
+                }
+            }
+        }
+        return stats;
+    }
+
+    /** Keywords that indicate security/config sensitivity in file paths. */
+    private static final List<String> CRITICAL_KEYWORDS = List.of(
+        "auth", "security", "password", "secret", "token", "crypto", "encrypt",
+        "ssl", "cert", "login", "session", "permission", "privilege", "oauth"
+    );
+    private static final List<String> CRITICAL_EXTENSIONS = List.of(
+        ".env", ".pem", ".key", ".crt", ".p12", ".pfx", ".jks", ".keystore"
+    );
+    private static final List<String> DEPENDENCY_FILES = List.of(
+        "pom.xml", "package.json", "build.gradle", "requirements.txt",
+        "go.mod", "cargo.toml", "Gemfile", "pyproject.toml", "package-lock.json"
+    );
+
+    /**
+     * Runs all 8 enriched risk metrics and returns a scored result.
+     *
+     * <pre>
+     * Metric 1 — Change Volume (lines + files)
+     * Metric 2 — Change Concentration (lines / file)
+     * Metric 3 — Critical Pattern Detection (security-sensitive paths)
+     * Metric 4 — Test Coverage Ratio (source files with test counterparts)
+     * Metric 5 — File Age (days since last modification in target history)
+     * Metric 6 — Author Diversity & Knowledge Concentration
+     * Metric 7 — First-Time Contributor (no prior history in these files)
+     * Metric 8 — Hotspot Detection (churn ≥ 6 in recent history)
+     * + Bonus: Merge Conflicts, Dependency Changes
+     * </pre>
+     */
+    private EnrichedRiskResult computeEnrichedRisk(
+            String username, String repoName,
+            List<String> changedFiles, int linesAdded, int linesRemoved,
+            boolean hasConflicts, List<String> conflictedFiles,
+            String targetCommit, String prAuthor,
+            Set<String> allSourcePaths,
+            String prType) {
+
+        EnrichedRiskResult r = new EnrichedRiskResult();
+        r.prType = prType;
+        long nowMs = System.currentTimeMillis();
+        int totalFiles = changedFiles.size();
+        int totalLines = linesAdded + linesRemoved;
+
+        // ── Metric 0: PR Type ────────────────────────────────────────────────
+        if (prType != null && !prType.isBlank() && PR_TYPE_DELTA.containsKey(prType)) {
+            int typeDelta = PR_TYPE_DELTA.get(prType)[0];
+            String typeReason = PR_TYPE_REASON.getOrDefault(prType, "PR type: " + prType);
+            String typeIcon   = PR_TYPE_ICON.getOrDefault(prType, "📋");
+            String typeLabel  = prType.replace('_', ' ');
+            r.riskScore += typeDelta;
+            if (typeDelta > 0) r.reasons.add(typeReason);
+            treeNode(r, typeIcon, "PR Type: " + typeLabel, typeDelta, typeReason);
+        }
+
+        // ── Bonus: Merge Conflicts ────────────────────────────────────────────
+        if (hasConflicts) {
+            int delta = 30;
+            String cfStr = String.join(", ", conflictedFiles.subList(0, Math.min(3, conflictedFiles.size())))
+                           + (conflictedFiles.size() > 3 ? " …" : "");
+            String reason = "Merge conflicts in " + conflictedFiles.size() + " file(s): " + cfStr;
+            r.riskScore += delta;
+            r.reasons.add(reason);
+            r.recommendations.add("Resolve all conflicts using 'vega merge' before merging");
+            treeNode(r, "⚔️", "Merge Conflicts", delta, reason);
+        }
+
+        // ── Metric 1: Change Volume ───────────────────────────────────────────
+        if (totalLines > 500) {
+            int delta = 20;
+            String reason = "Large change volume: " + totalLines + " lines affected across " + totalFiles + " file(s)";
+            r.riskScore += delta;
+            r.reasons.add(reason);
+            r.recommendations.add("Consider splitting into smaller, focused PRs");
+            treeNode(r, "📦", "Change Volume (lines)", delta, reason);
+        } else if (totalLines > 150) {
+            int delta = 10;
+            String reason = "Moderate change volume: " + totalLines + " lines affected";
+            r.riskScore += delta;
+            r.reasons.add(reason);
+            treeNode(r, "📦", "Change Volume (lines)", delta, reason);
+        } else {
+            treeNode(r, "📦", "Change Volume (lines)", 0, "Small change: " + totalLines + " lines — low volume risk");
+        }
+
+        if (totalFiles > 10) {
+            int delta = 15;
+            String reason = "High breadth: " + totalFiles + " files changed — possible shotgun pattern";
+            r.riskScore += delta;
+            r.reasons.add(reason);
+            r.recommendations.add("Verify all changes belong to the same concern");
+            treeNode(r, "📂", "Files Changed (breadth)", delta, reason);
+        } else if (totalFiles > 5) {
+            int delta = 5;
+            String reason = "Multiple files changed: " + totalFiles;
+            r.riskScore += delta;
+            r.reasons.add(reason);
+            treeNode(r, "📂", "Files Changed (breadth)", delta, reason);
+        } else {
+            treeNode(r, "📂", "Files Changed (breadth)", 0, totalFiles + " files — focused change");
+        }
+
+        // ── Metric 2: Change Concentration ───────────────────────────────────
+        if (totalFiles > 0) {
+            r.changeConcentration = (double) totalLines / totalFiles;
+            if (r.changeConcentration > 150) {
+                int delta = 10;
+                String reason = "High change concentration: avg " + String.format("%.0f", r.changeConcentration) + " lines/file — deep, concentrated change";
+                r.riskScore += delta;
+                r.reasons.add(reason);
+                treeNode(r, "📐", "Change Concentration", delta, reason);
+            } else {
+                treeNode(r, "📐", "Change Concentration", 0, String.format("%.0f", r.changeConcentration) + " lines/file — acceptable concentration");
+            }
+        }
+
+        // ── Metric 3: Critical Pattern Detection ─────────────────────────────
+        for (String file : changedFiles) {
+            String lower = file.toLowerCase();
+            boolean isCritical = CRITICAL_EXTENSIONS.stream().anyMatch(lower::endsWith) ||
+                CRITICAL_KEYWORDS.stream().anyMatch(lower::contains);
+            if (isCritical) r.criticalPatternFiles.add(file);
+        }
+        if (!r.criticalPatternFiles.isEmpty()) {
+            int delta = 25;
+            String reason = "Security-sensitive file(s) changed: " +
+                String.join(", ", r.criticalPatternFiles.subList(0, Math.min(3, r.criticalPatternFiles.size()))) +
+                (r.criticalPatternFiles.size() > 3 ? " …" : "");
+            r.riskScore += delta;
+            r.reasons.add(reason);
+            r.recommendations.add("Security review required — involve a security-aware reviewer");
+            treeNode(r, "🔐", "Security-Sensitive Files", delta, reason);
+        } else {
+            treeNode(r, "🔐", "Security-Sensitive Files", 0, "No security-sensitive paths detected");
+        }
+
+        // ── Bonus: Dependency Files ───────────────────────────────────────────
+        long depChanged = changedFiles.stream().filter(f ->
+            DEPENDENCY_FILES.stream().anyMatch(d -> f.equals(d) || f.endsWith("/" + d))).count();
+        if (depChanged > 0) {
+            int delta = 10;
+            String reason = "Dependency manifest changed — downstream impact possible";
+            r.riskScore += delta;
+            r.reasons.add(reason);
+            r.recommendations.add("Run full dependency audit and integration tests");
+            treeNode(r, "📦", "Dependency Manifest", delta, reason);
+        }
+
+        // ── Metric 4: Test Coverage Ratio ────────────────────────────────────
+        int sourceFileCount = 0, testedCount = 0;
+        List<String> untestedFiles = new ArrayList<>();
+        for (String file : changedFiles) {
+            String lower = file.toLowerCase();
+            if (lower.matches(".*\\.(java|py|js|ts|go|rb|cpp|c|cs|kt|scala|rs)$")
+                    && !lower.contains("test") && !lower.contains("spec")) {
+                sourceFileCount++;
+                String base = file.contains("/") ? file.substring(file.lastIndexOf('/') + 1) : file;
+                String stem = base.contains(".") ? base.substring(0, base.lastIndexOf('.')) : base;
+                boolean hasTest = allSourcePaths.stream().anyMatch(p -> {
+                    String pl = p.toLowerCase();
+                    return (pl.contains("test") || pl.contains("spec")) && pl.contains(stem.toLowerCase());
+                });
+                if (hasTest) testedCount++; else untestedFiles.add(file);
+            }
+        }
+        if (sourceFileCount > 0) {
+            r.testCoveragePercent = (int) ((double) testedCount / sourceFileCount * 100);
+            if (r.testCoveragePercent < 30 && sourceFileCount >= 2) {
+                int delta = 15;
+                String reason = "Low test coverage: only " + r.testCoveragePercent + "% of changed source files have test counterparts";
+                r.riskScore += delta;
+                r.reasons.add(reason);
+                r.recommendations.add("Add tests for: " +
+                    String.join(", ", untestedFiles.subList(0, Math.min(3, untestedFiles.size()))));
+                treeNode(r, "🧪", "Test Coverage", delta, reason);
+            } else if (r.testCoveragePercent < 60 && sourceFileCount >= 3) {
+                int delta = 7;
+                String reason = "Partial test coverage: " + r.testCoveragePercent + "% of changed files covered by tests";
+                r.riskScore += delta;
+                r.reasons.add(reason);
+                treeNode(r, "🧪", "Test Coverage", delta, reason);
+            } else {
+                treeNode(r, "🧪", "Test Coverage", 0, r.testCoveragePercent + "% of changed source files have tests");
+            }
+        }
+
+        // ── Metrics 5-8: File History Analysis ───────────────────────────────
+        if (!changedFiles.isEmpty() && targetCommit != null) {
+            Map<String, FileHistoryStats> hist = walkFileHistory(
+                username, repoName, targetCommit, changedFiles, prAuthor, 80);
+
+            // Metric 5: File Age
+            long totalAgeDays = 0; int ageCount = 0;
+            for (Map.Entry<String, FileHistoryStats> e : hist.entrySet()) {
+                FileHistoryStats s = e.getValue();
+                if (s.lastModifiedMs > 0) {
+                    long days = (nowMs - s.lastModifiedMs) / 86_400_000L;
+                    r.fileAgeDaysMax = (int) Math.max(r.fileAgeDaysMax, days);
+                    totalAgeDays += days; ageCount++;
+                    if (days > 90) r.staleFiles.add(e.getKey());
+                } else if (s.changeCount == 0) {
+                    r.staleFiles.add(e.getKey());
+                }
+            }
+            if (ageCount > 0) r.fileAgeDaysAvg = (int) (totalAgeDays / ageCount);
+
+            if (!r.staleFiles.isEmpty()) {
+                int delta = Math.min(20, 5 + r.staleFiles.size() * 3);
+                String reason = "Stale file(s) modified: " + r.staleFiles.size() + " file(s) last touched " +
+                    r.fileAgeDaysMax + "+ days ago — higher regression risk for dormant code";
+                r.riskScore += delta;
+                r.reasons.add(reason);
+                r.recommendations.add("Extra care required when modifying long-untouched files");
+                treeNode(r, "⏱", "File Age (staleness)", delta, reason);
+            } else {
+                treeNode(r, "⏱", "File Age (staleness)", 0,
+                    ageCount > 0 ? "Max " + r.fileAgeDaysMax + "d, avg " + r.fileAgeDaysAvg + "d — recently active files" : "No prior history found");
+            }
+
+            // Metric 6: Author Diversity & Knowledge Concentration
+            Set<String> allAuthors = new LinkedHashSet<>();
+            hist.values().forEach(s -> allAuthors.addAll(s.uniqueAuthors));
+            r.authorDiversityCount = allAuthors.size();
+            if (allAuthors.size() == 1 && totalFiles >= 3) {
+                int delta = 8;
+                String reason = "Knowledge concentration: all recently-changed files belong to a single author — bus-factor risk";
+                r.riskScore += delta;
+                r.reasons.add(reason);
+                treeNode(r, "👥", "Author Diversity", delta, reason);
+            } else if (allAuthors.size() >= 5) {
+                int delta = 5;
+                String reason = "High author diversity: " + allAuthors.size() + " authors previously modified these files — coordination risk";
+                r.riskScore += delta;
+                r.reasons.add(reason);
+                treeNode(r, "👥", "Author Diversity", delta, reason);
+            } else {
+                treeNode(r, "👥", "Author Diversity", 0, r.authorDiversityCount + " author(s) in file history — healthy");
+            }
+
+            // Metric 7: First-Time Contributor files
+            for (Map.Entry<String, FileHistoryStats> e : hist.entrySet()) {
+                if (!e.getValue().prAuthorTouchedBefore && e.getValue().changeCount > 0) {
+                    r.firstTimeFiles.add(e.getKey());
+                }
+            }
+            if (!r.firstTimeFiles.isEmpty()) {
+                int delta = Math.min(15, r.firstTimeFiles.size() * 4);
+                String reason = "First-time contribution to " + r.firstTimeFiles.size() + " file(s): PR author has no prior history in these files";
+                r.riskScore += delta;
+                r.reasons.add(reason);
+                r.recommendations.add("Pair review recommended for unfamiliar files: " +
+                    String.join(", ", r.firstTimeFiles.subList(0, Math.min(3, r.firstTimeFiles.size()))));
+                treeNode(r, "🆕", "First-Time Files", delta, reason);
+            } else {
+                treeNode(r, "🆕", "First-Time Files", 0, "PR author has prior history in all changed files");
+            }
+
+            // Metric 8: Hotspot Detection
+            for (Map.Entry<String, FileHistoryStats> e : hist.entrySet()) {
+                if (e.getValue().changeCount >= 6) r.hotspotFiles.add(e.getKey());
+            }
+            if (!r.hotspotFiles.isEmpty()) {
+                int delta = Math.min(15, r.hotspotFiles.size() * 4);
+                String reason = "Hotspot file(s) detected: " + r.hotspotFiles.size() + " file(s) changed ≥6 times recently — potentially unstable area";
+                r.riskScore += delta;
+                r.reasons.add(reason);
+                r.recommendations.add("Review recent commit history on hotspot: " +
+                    String.join(", ", r.hotspotFiles.subList(0, Math.min(2, r.hotspotFiles.size()))));
+                treeNode(r, "🔥", "Hotspot Files", delta, reason);
+            } else {
+                treeNode(r, "🔥", "Hotspot Files", 0, "No hotspot files (≥6 changes) detected");
+            }
+        }
+
+        // ── Derive intermediate Risk Level before AI ──────────────────────────
+        r.riskLevel = r.riskScore >= 45 ? "HIGH" : r.riskScore >= 18 ? "MEDIUM" : "LOW";
+
+        // ── AI Analysis ───────────────────────────────────────────────────────
+        try {
+            callAgentForPrAnalysis(r, username, repoName, changedFiles, linesAdded, linesRemoved);
+        } catch (Exception e) {
+            log.warn("AI analysis skipped for PR in {}/{}: {}", username, repoName, e.getMessage());
+            treeNode(r, "🤖", "AI Review", 0, "AI analysis skipped: " + e.getMessage());
+        }
+
+        // ── Re-derive Risk Level (post AI) ────────────────────────────────────
+        r.riskLevel = r.riskScore >= 45 ? "HIGH" : r.riskScore >= 18 ? "MEDIUM" : "LOW";
+
+        if (r.recommendations.isEmpty()) {
+            r.recommendations.add("Changes look well-scoped; standard review process applies");
+        }
+        return r;
+    }
+
+    /**
+     * Calls the agent service for AI PR analysis and mutates the result with AI findings + tree nodes.
+     */
+    private void callAgentForPrAnalysis(EnrichedRiskResult r, String username, String repoName,
+                                         List<String> changedFiles, int linesAdded, int linesRemoved) {
+        String url = agentServiceUrl + "/api/agent/pr-analysis";
+        java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(10))
+            .build();
+
+        // Build request JSON manually (avoid adding Jackson dep for simple object)
+        StringBuilder reqJson = new StringBuilder("{");
+        reqJson.append("\"repositoryName\":\"").append(escJson(repoName)).append("\",");
+        reqJson.append("\"author\":\"").append(escJson(username)).append("\",");
+        reqJson.append("\"linesAdded\":").append(linesAdded).append(",");
+        reqJson.append("\"linesRemoved\":").append(linesRemoved).append(",");
+        reqJson.append("\"riskLevel\":\"").append(r.riskLevel).append("\",");
+        if (r.prType != null) reqJson.append("\"prType\":\"").append(r.prType).append("\",");
+        reqJson.append("\"filesChanged\":[");
+        for (int i = 0; i < changedFiles.size(); i++) {
+            if (i > 0) reqJson.append(",");
+            reqJson.append("\"").append(escJson(changedFiles.get(i))).append("\"");
+        }
+        reqJson.append("],\"riskReasons\":[");
+        List<String> reasons = r.reasons;
+        for (int i = 0; i < reasons.size(); i++) {
+            if (i > 0) reqJson.append(",");
+            reqJson.append("\"").append(escJson(reasons.get(i))).append("\"");
+        }
+        reqJson.append("]}");
+
+        java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+            .uri(java.net.URI.create(url))
+            .header("Content-Type", "application/json")
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(reqJson.toString()))
+            .timeout(java.time.Duration.ofSeconds(30))
+            .build();
+
+        try {
+            java.net.http.HttpResponse<String> resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 200) {
+                String body = resp.body();
+                // Parse findings from JSON response
+                // findings field: ["SEVERITY:::CATEGORY:::description:::delta", ...]
+                java.util.regex.Pattern findPat = java.util.regex.Pattern.compile(
+                    "\"findings\"\\s*:\\s*\\[([^\\]]*?)\\]", java.util.regex.Pattern.DOTALL);
+                java.util.regex.Matcher fm = findPat.matcher(body);
+                if (fm.find()) {
+                    String arr = fm.group(1);
+                    java.util.regex.Matcher entryM = java.util.regex.Pattern
+                        .compile("\"((?:[^\"\\\\]|\\\\.)*?)\"").matcher(arr);
+                    while (entryM.find()) {
+                        String entry = entryM.group(1).replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
+                        if (entry.contains(":::")) {
+                            r.aiFindings.add(entry);
+                            // Parse delta from entry "SEV:::CAT:::desc:::delta"
+                            String[] parts = entry.split(":::", 4);
+                            int delta = 0;
+                            if (parts.length >= 4) {
+                                try { delta = Integer.parseInt(parts[3].trim()); } catch (Exception ignored) {}
+                            }
+                            // Don't add score for SCORE=0 findings
+                            if (delta > 0) {
+                                r.riskScore += delta;
+                                r.aiScoreDelta += delta;
+                                String sev = parts.length > 0 ? parts[0] : "?";
+                                String cat = parts.length > 1 ? parts[1] : "?";
+                                String desc = parts.length > 2 ? parts[2] : entry;
+                                String aiReason = "[" + sev + "/" + cat + "] " + desc;
+                                r.reasons.add("AI: " + aiReason);
+                                treeNode(r, "🤖", "AI: " + cat, delta, aiReason);
+                            }
+                        }
+                    }
+                }
+                // If no findings parsed yet, add a baseline node
+                if (r.aiFindings.isEmpty()) {
+                    treeNode(r, "🤖", "AI Review", 0, "AI analysis completed — no additional findings");
+                }
+                // Also parse aiExplanation/aiRiskSummary if present in response for later use
+            } else if (resp.statusCode() == 503) {
+                treeNode(r, "🤖", "AI Review", 0, "AI service not configured (GOOGLE_AI_API_KEY not set)");
+            } else {
+                treeNode(r, "🤖", "AI Review", 0, "AI service returned HTTP " + resp.statusCode());
+            }
+        } catch (java.io.IOException | InterruptedException e) {
+            throw new RuntimeException("Agent service unreachable: " + e.getMessage(), e);
+        }
+    }
+
+    private static String escJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
     }
 
     /**

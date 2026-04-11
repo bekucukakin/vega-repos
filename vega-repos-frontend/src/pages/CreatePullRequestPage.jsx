@@ -21,8 +21,20 @@ export default function CreatePullRequestPage() {
   const [sourceBranch, setSourceBranch] = useState('')
   const [targetBranch, setTargetBranch] = useState('main')
   const [description, setDescription] = useState('')
+  const [prType, setPrType] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  const PR_TYPES = [
+    { value: 'BUG_FIX',       label: 'Bug Fix',       icon: '🐛', desc: 'Fix a defect or regression',    risk: 'medium' },
+    { value: 'HOTFIX',        label: 'Hotfix',        icon: '🚨', desc: 'Emergency critical patch',       risk: 'high'   },
+    { value: 'NEW_FEATURE',   label: 'New Feature',   icon: '✨', desc: 'Add new functionality',          risk: 'medium' },
+    { value: 'REFACTOR',      label: 'Refactor',      icon: '🔧', desc: 'Restructure existing code',      risk: 'medium' },
+    { value: 'PERFORMANCE',   label: 'Performance',   icon: '⚡', desc: 'Improve speed or efficiency',    risk: 'medium' },
+    { value: 'SECURITY',      label: 'Security',      icon: '🔒', desc: 'Fix security vulnerability',     risk: 'high'   },
+    { value: 'DOCUMENTATION', label: 'Docs',          icon: '📝', desc: 'Update docs or comments',        risk: 'low'    },
+    { value: 'CHORE',         label: 'Chore',         icon: '🛠', desc: 'Config, build, deps cleanup',    risk: 'low'    },
+  ]
 
   const headers = useMemo(() => (token ? { Authorization: `Bearer ${token}` } : {}), [token])
 
@@ -61,7 +73,7 @@ export default function CreatePullRequestPage() {
       const r = await fetch(`${API_BASE}/repos/${username}/${repoName}/pull-requests`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceBranch, targetBranch, description }),
+        body: JSON.stringify({ sourceBranch, targetBranch, description, prType: prType || undefined }),
       })
       const data = await safeJson(r)
       if (r.ok && data?.id) {
@@ -141,6 +153,30 @@ export default function CreatePullRequestPage() {
               <div className={styles.sameError}>Source and target branches must be different.</div>
             )}
 
+            {/* PR Type Selector */}
+            <div className={styles.typeSection}>
+              <label className={styles.typeLabel}>
+                PR Type <span className={styles.optional}>(optional — affects risk score)</span>
+              </label>
+              <p className={styles.typeHint}>Select the purpose of this pull request for more accurate risk analysis</p>
+              <div className={styles.typeGrid}>
+                {PR_TYPES.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    className={`${styles.typeCard} ${prType === t.value ? styles.typeSelected : ''}`}
+                    onClick={() => setPrType(prType === t.value ? '' : t.value)}
+                    title={t.desc}
+                  >
+                    <span className={styles.typeIcon}>{t.icon}</span>
+                    <span className={styles.typeName}>{t.label}</span>
+                    <span className={styles.typeDesc}>{t.desc}</span>
+                    <span className={styles.typeRiskBadge} data-risk={t.risk}>{t.risk.toUpperCase()}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className={styles.field}>
               <label className={styles.label}>Description <span className={styles.optional}>(optional)</span></label>
               <textarea
@@ -166,7 +202,8 @@ export default function CreatePullRequestPage() {
             </div>
 
             <p className={styles.footer}>
-              VEGA will perform 3-way conflict detection and rule-based risk analysis on PR creation.
+              VEGA will perform 3-way conflict detection, 8-metric rule-based analysis, and AI review on PR creation.
+              {prType && ` PR type "${prType.replace(/_/g, ' ')}" will be factored into the risk score.`}
             </p>
           </form>
         )}
