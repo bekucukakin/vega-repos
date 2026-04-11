@@ -39,6 +39,15 @@ public class RepoCollaborator {
     @Builder.Default
     private Boolean canCreatePr = true;
 
+    /**
+     * Collaborator role: "developer" (can create/push PRs, cannot approve own PR)
+     * or "reviewer" (can only review/approve/reject PRs, cannot create PRs or push).
+     * DB column must not be {@code ROLE} — reserved in H2; old DBs may lack this column until ddl-auto adds it.
+     */
+    @Column(name = "collaborator_role", nullable = false, length = 50)
+    @Builder.Default
+    private String role = "developer";
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

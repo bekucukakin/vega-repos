@@ -789,7 +789,16 @@ export default function RepoDetailPage() {
                 {collaborators.map((c) => (
                   <div key={c.id} className={styles.collabItem}>
                     <span className={styles.collabName}>{c.username}</span>
-                    {c.canCreatePr && <span className={styles.collabBadgePr}>Can create PR</span>}
+                    <span className={styles.collabBadgePr} style={{
+                      background: c.role === 'reviewer' ? '#6366f1' : '#22c55e',
+                      color: '#fff',
+                      borderRadius: 4,
+                      padding: '2px 8px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                    }}>
+                      {c.role === 'reviewer' ? 'Reviewer' : 'Developer'}
+                    </span>
                   </div>
                 ))}
               </div>

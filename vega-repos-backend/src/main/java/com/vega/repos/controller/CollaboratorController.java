@@ -119,11 +119,34 @@ public class CollaboratorController {
         Object u = body.get("username");
         String username = (u != null && u.toString() != null) ? u.toString().trim() : null;
         boolean canCreatePr = body.get("canCreatePr") != null ? (Boolean) body.get("canCreatePr") : true;
+        String role = body.get("role") != null ? body.get("role").toString() : "developer";
         if (username == null || username.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
         try {
-            var col = collaboratorService.addCollaborator(owner, repoName, username, canCreatePr);
+            var col = collaboratorService.addCollaborator(owner, repoName, username, canCreatePr, role);
+            return ResponseEntity.ok(col);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /** Update collaborator role. Owner only. */
+    @PatchMapping("/repos/{owner}/{repoName}/collaborators/{collaboratorUsername}/role")
+    public ResponseEntity<CollaboratorDto> updateRole(
+            @RequestHeader(value = "Authorization", required = false) String auth,
+            @PathVariable String owner, @PathVariable String repoName,
+            @PathVariable String collaboratorUsername,
+            @RequestBody Map<String, String> body) {
+        String user = repoAccessService.resolveUsername(auth);
+        if (user == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        if (!repoAccessService.isOwner(user, owner)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        String role = body != null ? body.get("role") : null;
+        if (role == null || role.isBlank()) return ResponseEntity.badRequest().build();
+        try {
+            var col = collaboratorService.updateCollaboratorRole(owner, repoName, collaboratorUsername, role);
             return ResponseEntity.ok(col);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();

@@ -97,6 +97,9 @@ export default function PullRequestDetailPage() {
   const [pr, setPr] = useState(null)
   const [diff, setDiff] = useState(null)
   const [canCreatePr, setCanCreatePr] = useState(false)
+  const [canApprovePr, setCanApprovePr] = useState(false)
+  const [canMergePr, setCanMergePr] = useState(false)
+  const [userRole, setUserRole] = useState('public')
   const [loading, setLoading] = useState(true)
   const [diffLoading, setDiffLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
@@ -122,9 +125,19 @@ export default function PullRequestDetailPage() {
   useEffect(() => {
     if (!username || !repoName) return
     fetch(`${API_BASE}/repos/${username}/${repoName}/can-pr`, { headers })
-      .then((r) => r.ok ? safeJson(r) : { canCreatePr: false })
-      .then((d) => setCanCreatePr(!!(d?.canCreatePr)))
-      .catch(() => setCanCreatePr(false))
+      .then((r) => r.ok ? safeJson(r) : {})
+      .then((d) => {
+        setCanCreatePr(!!(d?.canCreatePr))
+        setCanApprovePr(!!(d?.canApprovePr))
+        setCanMergePr(!!(d?.canMergePr))
+        setUserRole(d?.role || 'public')
+      })
+      .catch(() => {
+        setCanCreatePr(false)
+        setCanApprovePr(false)
+        setCanMergePr(false)
+        setUserRole('public')
+      })
   }, [username, repoName, headers])
 
   useEffect(() => {
@@ -214,6 +227,10 @@ export default function PullRequestDetailPage() {
               <span className={styles.branchPill}>{pr.targetBranch}</span>
               <span className={styles.metaDot}>·</span>
               <span>by <strong>{pr.author}</strong></span>
+              {pr.assignedReviewer && (
+                <><span className={styles.metaDot}>·</span>
+                <span>reviewer: <strong>{pr.assignedReviewer}</strong></span></>
+              )}
               <span className={styles.metaDot}>·</span>
               <span>{formatDate(pr.createdTimestamp)}</span>
               {pr.prType && <><span className={styles.metaDot}>·</span><PrTypeBadge type={pr.prType} /></>}
@@ -275,14 +292,14 @@ export default function PullRequestDetailPage() {
             {actionError && <p className={styles.actionError} role="alert">{actionError}</p>}
 
             {/* Action buttons */}
-            {canCreatePr && !isTerminal && (
+            {!isTerminal && (canApprovePr || canMergePr) && (
               <div className={styles.prActions}>
-                {pr.status === 'OPEN' && (
+                {canApprovePr && pr.status === 'OPEN' && (
                   <button type="button" onClick={() => doAction('review')} disabled={actionLoading} className={styles.actionBtn}>
                     Start Review
                   </button>
                 )}
-                {(pr.status === 'OPEN' || pr.status === 'REVIEWING') && (
+                {canApprovePr && (pr.status === 'OPEN' || pr.status === 'REVIEWING') && (
                   <>
                     <button type="button" onClick={() => doAction('approve')} disabled={actionLoading} className={styles.actionBtnApprove}>
                       Approve
@@ -292,7 +309,7 @@ export default function PullRequestDetailPage() {
                     </button>
                   </>
                 )}
-                {pr.status === 'APPROVED' && !pr.hasConflicts && (
+                {canMergePr && pr.status === 'APPROVED' && !pr.hasConflicts && (
                   <button type="button" onClick={() => doAction('merge')} disabled={actionLoading} className={styles.actionBtnMerge}>
                     Merge to {pr.targetBranch}
                   </button>

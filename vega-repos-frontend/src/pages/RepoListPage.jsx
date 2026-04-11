@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { fetchWithTimeout } from '../utils/fetchWithTimeout'
+import { parseApiError } from '../utils/parseApiError'
 import styles from './RepoListPage.module.css'
 
 const API_BASE = '/api'
@@ -56,7 +58,7 @@ function RepoRow({ repo }) {
 }
 
 export default function RepoListPage() {
-  const { user, getAuthHeader } = useAuth()
+  const { user, token, getAuthHeader } = useAuth()
   const [repos, setRepos] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -64,16 +66,40 @@ export default function RepoListPage() {
   const [activeTab, setActiveTab] = useState('all')
 
   useEffect(() => {
-    if (!user?.username) return
-    fetch(`${API_BASE}/repos/me`, { headers: getAuthHeader() })
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to load repositories')
-        return res.json()
+    if (!user?.username) {
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    setError('')
+    fetchWithTimeout(`${API_BASE}/repos/me`, { headers: getAuthHeader() }, 60_000)
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          const detail = typeof data.error === 'string' ? data.error : typeof data.message === 'string' ? data.message : null
+          if (res.status === 401) {
+            throw new Error('Session expired or invalid. Please sign in again.')
+          }
+          throw new Error(
+            detail ||
+              (res.status >= 500
+                ? 'Server error while loading repositories. Is HDFS running (Docker NameNode/DataNode)?'
+                : `Failed to load repositories (HTTP ${res.status}).`),
+          )
+        }
+        if (!cancelled) setRepos(Array.isArray(data) ? data : [])
       })
-      .then(setRepos)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [user?.username])
+      .catch((err) => {
+        if (!cancelled) setError(parseApiError(err))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user?.username, token, getAuthHeader])
 
   const ownRepos = useMemo(() => repos.filter((r) => r.owner === user?.username), [repos, user])
   const collabRepos = useMemo(() => repos.filter((r) => r.owner !== user?.username), [repos, user])

@@ -22,6 +22,8 @@ export default function CreatePullRequestPage() {
   const [targetBranch, setTargetBranch] = useState('main')
   const [description, setDescription] = useState('')
   const [prType, setPrType] = useState('')
+  const [assignedReviewer, setAssignedReviewer] = useState('')
+  const [reviewers, setReviewers] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -55,6 +57,14 @@ export default function CreatePullRequestPage() {
       })
       .catch(() => setBranches([]))
       .finally(() => setBranchesLoading(false))
+    // Load reviewer-role collaborators
+    fetch(`${API_BASE}/repos/${username}/${repoName}/collaborators`, { headers })
+      .then((r) => r.ok ? safeJson(r) : [])
+      .then((data) => {
+        const list = Array.isArray(data) ? data : []
+        setReviewers(list.filter(c => c.role === 'reviewer'))
+      })
+      .catch(() => setReviewers([]))
   }, [username, repoName, headers])
 
   const handleSubmit = async (e) => {
@@ -73,7 +83,7 @@ export default function CreatePullRequestPage() {
       const r = await fetch(`${API_BASE}/repos/${username}/${repoName}/pull-requests`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceBranch, targetBranch, description, prType: prType || undefined }),
+        body: JSON.stringify({ sourceBranch, targetBranch, description, prType: prType || undefined, assignedReviewer: assignedReviewer || undefined }),
       })
       const data = await safeJson(r)
       if (r.ok && data?.id) {
@@ -187,6 +197,23 @@ export default function CreatePullRequestPage() {
                 rows={4}
               />
             </div>
+
+            {reviewers.length > 0 && (
+              <div className={styles.field}>
+                <label className={styles.label}>Assign Reviewer <span className={styles.optional}>(optional)</span></label>
+                <p className={styles.hint}>Assign a specific reviewer, or leave empty for any reviewer to approve</p>
+                <select
+                  className={styles.select}
+                  value={assignedReviewer}
+                  onChange={(e) => setAssignedReviewer(e.target.value)}
+                >
+                  <option value="">Any reviewer</option>
+                  {reviewers.map((r) => (
+                    <option key={r.username} value={r.username}>{r.username}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {error && <p className={styles.errorMsg} role="alert">{error}</p>}
 

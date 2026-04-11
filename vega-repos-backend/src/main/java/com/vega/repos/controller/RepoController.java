@@ -192,10 +192,16 @@ public class RepoController {
         if (!repoAccessService.canAccess(currentUser, username, repoName)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
+        // Only owner or developer collaborator can create PRs (not reviewers)
+        if (!repoAccessService.canCreatePrInRepo(currentUser, username, repoName)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Only owner or developer collaborators can create pull requests"));
+        }
         String sourceBranch = body.get("sourceBranch");
         String targetBranch = body.get("targetBranch");
         String description = body.getOrDefault("description", "");
         String prType = body.get("prType"); // optional — BUG_FIX, HOTFIX, NEW_FEATURE, etc.
+        String assignedReviewer = body.get("assignedReviewer"); // optional
         if (sourceBranch == null || sourceBranch.isBlank() || targetBranch == null || targetBranch.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "sourceBranch and targetBranch are required"));
         }
@@ -203,7 +209,7 @@ public class RepoController {
             return ResponseEntity.badRequest().body(Map.of("error", "Source and target branches must be different"));
         }
         try {
-            PrDto pr = repoService.createPullRequest(username, repoName, sourceBranch, targetBranch, currentUser, description, prType);
+            PrDto pr = repoService.createPullRequest(username, repoName, sourceBranch, targetBranch, currentUser, description, prType, assignedReviewer);
             return ResponseEntity.status(HttpStatus.CREATED).body(pr);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -229,9 +235,20 @@ public class RepoController {
         return ResponseEntity.ok(diff);
     }
 
-    /** Whether current user can create/approve/merge PRs (owner or collaborator with canCreatePr). */
+    /** Whether current user can push to this repo (owner or any collaborator, also public repo members). */
+    @GetMapping("/{username}/{repoName}/push-access")
+    public ResponseEntity<Map<String, Boolean>> canPush(
+            @RequestHeader(value = "Authorization", required = false) String auth,
+            @PathVariable String username, @PathVariable String repoName) {
+        String currentUser = repoAccessService.resolveUsername(auth);
+        if (currentUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        boolean canPush = repoAccessService.canPushToFeatureBranch(currentUser, username, repoName);
+        return ResponseEntity.ok(Map.of("canPush", canPush));
+    }
+
+    /** Whether current user can create/approve/merge PRs — role-aware response. */
     @GetMapping("/{username}/{repoName}/can-pr")
-    public ResponseEntity<Map<String, Boolean>> canCreatePr(
+    public ResponseEntity<Map<String, Object>> canCreatePr(
             @RequestHeader(value = "Authorization", required = false) String auth,
             @PathVariable String username, @PathVariable String repoName) {
         String currentUser = repoAccessService.resolveUsername(auth);
@@ -239,8 +256,16 @@ public class RepoController {
         if (!repoAccessService.canAccess(currentUser, username, repoName)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        boolean can = repoAccessService.canCreateOrApprovePr(currentUser, username, repoName);
-        return ResponseEntity.ok(Map.of("canCreatePr", can));
+        String role = repoAccessService.getCollaboratorRole(currentUser, username, repoName);
+        boolean canCreate = repoAccessService.canCreatePrInRepo(currentUser, username, repoName);
+        boolean canApprove = repoAccessService.canApprovePrInRepo(currentUser, username, repoName);
+        boolean canMerge = repoAccessService.canMergePrInRepo(currentUser, username, repoName);
+        return ResponseEntity.ok(Map.of(
+            "canCreatePr", canCreate,
+            "canApprovePr", canApprove,
+            "canMergePr", canMerge,
+            "role", role != null ? role : "public"
+        ));
     }
 
     @PostMapping("/{username}/{repoName}/pull-requests/{prId}/review")
@@ -249,7 +274,13 @@ public class RepoController {
             @PathVariable String username, @PathVariable String repoName, @PathVariable String prId) {
         String currentUser = repoAccessService.resolveUsername(auth);
         if (currentUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        if (!repoAccessService.canCreateOrApprovePr(currentUser, username, repoName)) {
+        // Reviewers and owners can start review; developers cannot review (they create PRs)
+        if (!repoAccessService.canApprovePrInRepo(currentUser, username, repoName)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        // Cannot review your own PR
+        PrDto pr = repoService.getPullRequest(username, repoName, prId);
+        if (pr != null && currentUser.equals(pr.getAuthor())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         if (!repoService.updatePullRequestReview(username, repoName, prId, currentUser)) {
@@ -264,7 +295,13 @@ public class RepoController {
             @PathVariable String username, @PathVariable String repoName, @PathVariable String prId) {
         String currentUser = repoAccessService.resolveUsername(auth);
         if (currentUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        if (!repoAccessService.canCreateOrApprovePr(currentUser, username, repoName)) {
+        // Only reviewers or owner can approve
+        if (!repoAccessService.canApprovePrInRepo(currentUser, username, repoName)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        // Cannot approve your own PR
+        PrDto pr = repoService.getPullRequest(username, repoName, prId);
+        if (pr != null && currentUser.equals(pr.getAuthor())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         if (!repoService.updatePullRequestApprove(username, repoName, prId, currentUser)) {
@@ -280,8 +317,18 @@ public class RepoController {
             @PathVariable String username, @PathVariable String repoName, @PathVariable String prId) {
         String currentUser = repoAccessService.resolveUsername(auth);
         if (currentUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        if (!repoAccessService.canCreateOrApprovePr(currentUser, username, repoName)) {
+        // Only owner or developer collaborator can merge
+        if (!repoAccessService.canMergePrInRepo(currentUser, username, repoName)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        // Developer/reviewer cannot merge their own PR unless it was approved by someone else
+        String role = repoAccessService.getCollaboratorRole(currentUser, username, repoName);
+        if ("developer".equals(role) || "reviewer".equals(role)) {
+            PrDto prCheck = repoService.getPullRequest(username, repoName, prId);
+            if (prCheck != null && currentUser.equals(prCheck.getAuthor())
+                    && (prCheck.getApprovedBy() == null || currentUser.equals(prCheck.getApprovedBy()))) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
         }
         String error = repoService.mergePullRequest(username, repoName, prId, currentUser);
         if (error != null) {
@@ -296,7 +343,13 @@ public class RepoController {
             @PathVariable String username, @PathVariable String repoName, @PathVariable String prId) {
         String currentUser = repoAccessService.resolveUsername(auth);
         if (currentUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        if (!repoAccessService.canCreateOrApprovePr(currentUser, username, repoName)) {
+        // Only reviewers or owner can reject
+        if (!repoAccessService.canApprovePrInRepo(currentUser, username, repoName)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        // Cannot reject your own PR
+        PrDto pr = repoService.getPullRequest(username, repoName, prId);
+        if (pr != null && currentUser.equals(pr.getAuthor())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         if (!repoService.updatePullRequestReject(username, repoName, prId, currentUser)) {

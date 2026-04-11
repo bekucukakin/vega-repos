@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { fetchWithTimeout } from '../utils/fetchWithTimeout'
 import { parseApiError } from '../utils/parseApiError'
 import styles from './RegisterPage.module.css'
 
@@ -71,7 +72,7 @@ export default function RegisterPage() {
 
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/auth/register`, {
+      const res = await fetchWithTimeout(`${API_BASE}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

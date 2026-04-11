@@ -13,4 +13,6 @@ public class CollaboratorDto {
     private Long id;
     private String username;
     private boolean canCreatePr;
+    /** "developer" or "reviewer" */
+    private String role;
 }

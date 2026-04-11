@@ -93,6 +93,58 @@ public class RepoAccessService {
     }
 
     /**
+     * Returns the role of the user in the repo: "owner", "developer", "reviewer", or null (no access).
+     */
+    public String getCollaboratorRole(String currentUser, String ownerUsername, String repoName) {
+        if (currentUser == null) return null;
+        if (currentUser.equals(ownerUsername)) return "owner";
+        return collaboratorRepository.findByOwnerUsernameAndRepoNameAndCollaboratorUsername(
+                        ownerUsername, repoName, currentUser)
+                .map(c -> c.getRole() != null ? c.getRole() : "developer")
+                .orElse(null);
+    }
+
+    /**
+     * Can the user CREATE a PR?
+     * Owner, developer, or reviewer can create PRs.
+     * Reviewer is a superset of developer — they can do everything a developer can, plus approve.
+     */
+    public boolean canCreatePrInRepo(String currentUser, String ownerUsername, String repoName) {
+        if (currentUser == null) return false;
+        if (currentUser.equals(ownerUsername)) return true;
+        return collaboratorRepository.findByOwnerUsernameAndRepoNameAndCollaboratorUsername(
+                        ownerUsername, repoName, currentUser)
+                .map(c -> Boolean.TRUE.equals(c.getCanCreatePr()))
+                .orElse(false);
+    }
+
+    /**
+     * Can the user APPROVE/REJECT a PR?
+     * Only reviewer or owner. Developers cannot approve.
+     * Self-approval is blocked at call site (author check).
+     */
+    public boolean canApprovePrInRepo(String currentUser, String ownerUsername, String repoName) {
+        if (currentUser == null) return false;
+        if (currentUser.equals(ownerUsername)) return true;
+        return collaboratorRepository.findByOwnerUsernameAndRepoNameAndCollaboratorUsername(
+                        ownerUsername, repoName, currentUser)
+                .map(c -> "reviewer".equals(c.getRole()))
+                .orElse(false);
+    }
+
+    /**
+     * Can the user MERGE a PR?
+     * Owner, developer, or reviewer (reviewer is superset of developer).
+     * Self-merge of own unreviewed PR is blocked at call site.
+     */
+    public boolean canMergePrInRepo(String currentUser, String ownerUsername, String repoName) {
+        if (currentUser == null) return false;
+        if (currentUser.equals(ownerUsername)) return true;
+        String role = getCollaboratorRole(currentUser, ownerUsername, repoName);
+        return "developer".equals(role) || "reviewer".equals(role);
+    }
+
+    /**
      * Can this user push to a protected branch (main/master)?
      * Only owner or collaborator. Public repos: non-collaborators must use branches + PR flow.
      */

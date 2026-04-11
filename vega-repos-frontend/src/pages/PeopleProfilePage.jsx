@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { fetchWithTimeout } from '../utils/fetchWithTimeout'
+import { parseApiError } from '../utils/parseApiError'
 import styles from './PeopleProfilePage.module.css'
 
 const API_BASE = '/api'
@@ -41,21 +43,37 @@ export default function PeopleProfilePage() {
 
   useEffect(() => {
     if (!decoded) return
+    let cancelled = false
     setLoading(true)
     setError('')
+    const headers = getAuthHeader()
     Promise.all([
-      fetch(`${API_BASE}/people/${encodeURIComponent(decoded)}/profile`, { headers: getAuthHeader() }),
-      fetch(`${API_BASE}/people/${encodeURIComponent(decoded)}/repos`, { headers: getAuthHeader() }),
+      fetchWithTimeout(`${API_BASE}/people/${encodeURIComponent(decoded)}/profile`, { headers }, 60_000),
+      fetchWithTimeout(`${API_BASE}/people/${encodeURIComponent(decoded)}/repos`, { headers }, 60_000),
     ])
       .then(async ([pr, rr]) => {
         if (!pr.ok) throw new Error('User not found')
-        if (!rr.ok) throw new Error('Could not load repositories')
-        const [p, r] = await Promise.all([pr.json(), rr.json()])
-        setProfile(p)
-        setRepos(Array.isArray(r) ? r : [])
+        const p = await pr.json()
+        if (!rr.ok) {
+          const err = await rr.json().catch(() => ({}))
+          const detail = typeof err.error === 'string' ? err.error : typeof err.message === 'string' ? err.message : null
+          throw new Error(detail || 'Could not load repositories')
+        }
+        const r = await rr.json()
+        if (!cancelled) {
+          setProfile(p)
+          setRepos(Array.isArray(r) ? r : [])
+        }
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
+      .catch((e) => {
+        if (!cancelled) setError(parseApiError(e))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [decoded, getAuthHeader])
 
   if (loading) {

@@ -139,7 +139,10 @@ export function AuthProvider({ children }) {
     }
   }, [token, logout])
 
-  const getAuthHeader = () => (token ? { Authorization: `Bearer ${token}` } : {})
+  const getAuthHeader = useCallback(
+    () => (token ? { Authorization: `Bearer ${token}` } : {}),
+    [token],
+  )
 
   return (
     <AuthContext.Provider value={{ token, user, login, logout, getAuthHeader }}>

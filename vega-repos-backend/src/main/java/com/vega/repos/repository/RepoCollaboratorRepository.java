@@ -23,4 +23,8 @@ public interface RepoCollaboratorRepository extends JpaRepository<RepoCollaborat
 
     void deleteByOwnerUsernameAndRepoNameAndCollaboratorUsername(
             String ownerUsername, String repoName, String collaboratorUsername);
+
+    /** Find all collaborators with a specific role in a repo. */
+    List<RepoCollaborator> findByOwnerUsernameAndRepoNameAndRole(
+            String ownerUsername, String repoName, String role);
 }

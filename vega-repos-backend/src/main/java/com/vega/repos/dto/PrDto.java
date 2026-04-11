@@ -37,6 +37,8 @@ public class PrDto {
     private List<String> riskReasons;
     /** Risk recommendations */
     private List<String> riskRecommendations;
+    /** Optionally assigned reviewer username (set at PR creation time) */
+    private String assignedReviewer;
     /** Who approved the PR */
     private String approvedBy;
     /** Who started review */

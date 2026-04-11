@@ -201,6 +201,12 @@ public class CollaboratorService {
     @Transactional
     public CollaboratorDto addCollaborator(String ownerUsername, String repoName,
                                            String collaboratorUsername, boolean canCreatePr) {
+        return addCollaborator(ownerUsername, repoName, collaboratorUsername, canCreatePr, "developer");
+    }
+
+    @Transactional
+    public CollaboratorDto addCollaborator(String ownerUsername, String repoName,
+                                           String collaboratorUsername, boolean canCreatePr, String role) {
         if (ownerUsername.equals(collaboratorUsername)) {
             throw new IllegalArgumentException("Cannot add owner as collaborator");
         }
@@ -208,12 +214,26 @@ public class CollaboratorService {
                 ownerUsername, repoName, collaboratorUsername)) {
             throw new IllegalArgumentException("Already a collaborator");
         }
+        String resolvedRole = (role != null && (role.equals("developer") || role.equals("reviewer"))) ? role : "developer";
         var col = RepoCollaborator.builder()
                 .ownerUsername(ownerUsername)
                 .repoName(repoName)
                 .collaboratorUsername(collaboratorUsername)
                 .canCreatePr(canCreatePr)
+                .role(resolvedRole)
                 .build();
+        col = collaboratorRepository.save(col);
+        return toDto(col);
+    }
+
+    @Transactional
+    public CollaboratorDto updateCollaboratorRole(String ownerUsername, String repoName,
+                                                   String collaboratorUsername, String role) {
+        var col = collaboratorRepository.findByOwnerUsernameAndRepoNameAndCollaboratorUsername(
+                ownerUsername, repoName, collaboratorUsername)
+                .orElseThrow(() -> new IllegalArgumentException("Collaborator not found"));
+        String resolvedRole = (role != null && (role.equals("developer") || role.equals("reviewer"))) ? role : "developer";
+        col.setRole(resolvedRole);
         col = collaboratorRepository.save(col);
         return toDto(col);
     }
@@ -236,6 +256,7 @@ public class CollaboratorService {
                 .id(c.getId())
                 .username(c.getCollaboratorUsername())
                 .canCreatePr(c.getCanCreatePr() != null && c.getCanCreatePr())
+                .role(c.getRole() != null ? c.getRole() : "developer")
                 .build();
     }
 

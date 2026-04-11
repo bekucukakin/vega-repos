@@ -978,6 +978,7 @@ public class RepoService {
                 .riskReasons(riskReasons.isEmpty() ? null : riskReasons)
                 .riskRecommendations(riskRecommendations.isEmpty() ? null : riskRecommendations)
                 .conflictedFiles(conflictedFiles.isEmpty() ? null : conflictedFiles)
+                .assignedReviewer(n.has("assignedReviewer") && !n.get("assignedReviewer").isNull() ? n.get("assignedReviewer").asText(null) : null)
                 .approvedBy(n.has("approvedBy") && !n.get("approvedBy").isNull() ? n.get("approvedBy").asText(null) : null)
                 .reviewedBy(n.has("reviewedBy") && !n.get("reviewedBy").isNull() ? n.get("reviewedBy").asText(null) : null)
                 .rejectedBy(n.has("rejectedBy") && !n.get("rejectedBy").isNull() ? n.get("rejectedBy").asText(null) : null)
@@ -1042,6 +1043,12 @@ public class RepoService {
     public PrDto createPullRequest(String username, String repoName,
                                    String sourceBranch, String targetBranch,
                                    String author, String description, String prType) {
+        return createPullRequest(username, repoName, sourceBranch, targetBranch, author, description, prType, null);
+    }
+
+    public PrDto createPullRequest(String username, String repoName,
+                                   String sourceBranch, String targetBranch,
+                                   String author, String description, String prType, String assignedReviewer) {
         // Validate branches
         String sourceCommit = getCommitHashForBranch(username, repoName, sourceBranch);
         String targetCommit = getCommitHashForBranch(username, repoName, targetBranch);
@@ -1141,6 +1148,7 @@ public class RepoService {
         prJson.put("status", "OPEN");
         if (description != null && !description.isBlank()) prJson.put("description", description);
         if (prType != null && !prType.isBlank()) prJson.put("prType", prType);
+        if (assignedReviewer != null && !assignedReviewer.isBlank()) prJson.put("assignedReviewer", assignedReviewer);
         prJson.put("diffSummary", diffSummary);
         prJson.put("hasConflicts", !conflictedFiles.isEmpty());
         prJson.putPOJO("conflictedFiles", conflictedFiles);
@@ -1209,6 +1217,7 @@ public class RepoService {
                 .criticalPatternFiles(risk.criticalPatternFiles.isEmpty() ? null : risk.criticalPatternFiles)
                 .changeConcentration(risk.changeConcentration)
                 .prType(prType)
+                .assignedReviewer(assignedReviewer)
                 .analysisTree(risk.analysisTree.isEmpty() ? null : risk.analysisTree)
                 .aiFindings(risk.aiFindings.isEmpty() ? null : risk.aiFindings)
                 .aiScoreDelta(risk.aiScoreDelta > 0 ? risk.aiScoreDelta : null)
