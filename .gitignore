@@ -7,7 +7,11 @@
 *.iml
 *.log
 logs/
-
+target/
+*.jar
+*.class
+*.log
+*.db
 # Maven (tüm modüller)
 target/
 

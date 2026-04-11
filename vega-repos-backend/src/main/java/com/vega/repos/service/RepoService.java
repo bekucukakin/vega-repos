@@ -822,9 +822,57 @@ public class RepoService {
                 .build();
     }
 
+    private static final ObjectMapper PR_MAPPER = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+
+    /**
+     * Parse a single PR JSON node into PrDto.
+     */
+    private PrDto parsePrNode(JsonNode n, String fallbackId) {
+        List<String> riskReasons = new ArrayList<>();
+        if (n.has("riskReasons") && n.get("riskReasons").isArray())
+            n.get("riskReasons").forEach(r -> riskReasons.add(r.asText()));
+
+        List<String> conflictedFiles = new ArrayList<>();
+        if (n.has("conflictedFiles") && n.get("conflictedFiles").isArray())
+            n.get("conflictedFiles").forEach(c -> conflictedFiles.add(c.asText()));
+
+        List<String> riskRecommendations = new ArrayList<>();
+        if (n.has("riskRecommendations") && n.get("riskRecommendations").isArray())
+            n.get("riskRecommendations").forEach(r -> riskRecommendations.add(r.asText()));
+
+        List<String> commitHashes = new ArrayList<>();
+        if (n.has("commitHashes") && n.get("commitHashes").isArray())
+            n.get("commitHashes").forEach(c -> commitHashes.add(c.asText()));
+
+        return PrDto.builder()
+                .id(n.has("id") ? n.get("id").asText() : fallbackId)
+                .sourceBranch(n.has("sourceBranch") ? n.get("sourceBranch").asText() : "")
+                .targetBranch(n.has("targetBranch") ? n.get("targetBranch").asText() : "")
+                .author(n.has("author") ? n.get("author").asText() : "")
+                .description(n.has("description") ? n.get("description").asText(null) : null)
+                .status(n.has("status") ? n.get("status").asText() : "OPEN")
+                .createdTimestamp(n.has("createdTimestamp") ? n.get("createdTimestamp").asLong() : 0)
+                .diffSummary(n.has("diffSummary") ? n.get("diffSummary").asText() : "")
+                .hasConflicts(n.has("hasConflicts") && n.get("hasConflicts").asBoolean())
+                .commitHashes(commitHashes.isEmpty() ? null : commitHashes)
+                .summaryFilesChanged(n.has("summaryFilesChanged") ? n.get("summaryFilesChanged").asInt() : null)
+                .summaryLinesAdded(n.has("summaryLinesAdded") ? n.get("summaryLinesAdded").asInt() : null)
+                .summaryLinesRemoved(n.has("summaryLinesRemoved") ? n.get("summaryLinesRemoved").asInt() : null)
+                .riskLevel(n.has("riskLevel") ? n.get("riskLevel").asText(null) : null)
+                .riskReasons(riskReasons.isEmpty() ? null : riskReasons)
+                .riskRecommendations(riskRecommendations.isEmpty() ? null : riskRecommendations)
+                .conflictedFiles(conflictedFiles.isEmpty() ? null : conflictedFiles)
+                .approvedBy(n.has("approvedBy") && !n.get("approvedBy").isNull() ? n.get("approvedBy").asText(null) : null)
+                .reviewedBy(n.has("reviewedBy") && !n.get("reviewedBy").isNull() ? n.get("reviewedBy").asText(null) : null)
+                .rejectedBy(n.has("rejectedBy") && !n.get("rejectedBy").isNull() ? n.get("rejectedBy").asText(null) : null)
+                .mergedBy(n.has("mergedBy") && !n.get("mergedBy").isNull() ? n.get("mergedBy").asText(null) : null)
+                .reviewStartedAt(n.has("reviewStartedAt") && n.get("reviewStartedAt").asLong() > 0 ? n.get("reviewStartedAt").asLong() : null)
+                .reviewCompletedAt(n.has("reviewCompletedAt") && n.get("reviewCompletedAt").asLong() > 0 ? n.get("reviewCompletedAt").asLong() : null)
+                .build();
+    }
+
     /**
      * List PRs from HDFS repo/.pr/ (PR-001.json, PR-002.json ...).
-     * PR metadata is stored when vega pr create/approve/merge runs (sync via push).
      */
     public List<PrDto> getPullRequests(String username, String repoName) {
         List<PrDto> prs = new ArrayList<>();
@@ -842,36 +890,8 @@ public class RepoService {
                     if (content == null) continue;
                     try {
                         JsonNode n = mapper.readTree(content);
-                        List<String> riskReasons = new ArrayList<>();
-                        if (n.has("riskReasons") && n.get("riskReasons").isArray()) {
-                            n.get("riskReasons").forEach(r -> riskReasons.add(r.asText()));
-                        }
-                        List<String> conflictedFiles = new ArrayList<>();
-                        if (n.has("conflictedFiles") && n.get("conflictedFiles").isArray()) {
-                            n.get("conflictedFiles").forEach(c -> conflictedFiles.add(c.asText()));
-                        }
-                        List<String> riskRecommendations = new ArrayList<>();
-                        if (n.has("riskRecommendations") && n.get("riskRecommendations").isArray()) {
-                            n.get("riskRecommendations").forEach(r -> riskRecommendations.add(r.asText()));
-                        }
-                        PrDto dto = PrDto.builder()
-                                .id(n.has("id") ? n.get("id").asText() : status.getPath().getName().replace(".json", ""))
-                                .sourceBranch(n.has("sourceBranch") ? n.get("sourceBranch").asText() : "")
-                                .targetBranch(n.has("targetBranch") ? n.get("targetBranch").asText() : "")
-                                .author(n.has("author") ? n.get("author").asText() : "")
-                                .status(n.has("status") ? n.get("status").asText() : "OPEN")
-                                .createdTimestamp(n.has("createdTimestamp") ? n.get("createdTimestamp").asLong() : 0)
-                                .diffSummary(n.has("diffSummary") ? n.get("diffSummary").asText() : "")
-                                .hasConflicts(n.has("hasConflicts") && n.get("hasConflicts").asBoolean())
-                                .summaryFilesChanged(n.has("summaryFilesChanged") ? n.get("summaryFilesChanged").asInt() : null)
-                                .summaryLinesAdded(n.has("summaryLinesAdded") ? n.get("summaryLinesAdded").asInt() : null)
-                                .summaryLinesRemoved(n.has("summaryLinesRemoved") ? n.get("summaryLinesRemoved").asInt() : null)
-                                .riskLevel(n.has("riskLevel") ? n.get("riskLevel").asText() : null)
-                                .riskReasons(riskReasons.isEmpty() ? null : riskReasons)
-                                .riskRecommendations(riskRecommendations.isEmpty() ? null : riskRecommendations)
-                                .conflictedFiles(conflictedFiles.isEmpty() ? null : conflictedFiles)
-                                .build();
-                        prs.add(dto);
+                        String fallbackId = status.getPath().getName().replace(".json", "");
+                        prs.add(parsePrNode(n, fallbackId));
                     } catch (Exception e) {
                         log.debug("Failed to parse PR file {}: {}", status.getPath(), e.getMessage());
                     }
@@ -884,29 +904,281 @@ public class RepoService {
         return prs;
     }
 
-    private static final ObjectMapper PR_MAPPER = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+    /**
+     * Create a new Pull Request directly on HDFS (from UI).
+     * Performs 3-way conflict detection and rule-based risk analysis.
+     */
+    public PrDto createPullRequest(String username, String repoName,
+                                   String sourceBranch, String targetBranch,
+                                   String author, String description) {
+        // Validate branches
+        String sourceCommit = getCommitHashForBranch(username, repoName, sourceBranch);
+        String targetCommit = getCommitHashForBranch(username, repoName, targetBranch);
+        if (sourceCommit == null)
+            throw new IllegalArgumentException("Source branch not found: " + sourceBranch);
+        if (targetCommit == null)
+            throw new IllegalArgumentException("Target branch not found: " + targetBranch);
+        if (sourceCommit.equals(targetCommit))
+            throw new IllegalArgumentException("Source and target branches point to the same commit. Nothing to merge.");
+
+        // Collect blobs from each branch
+        String sourceTree = getTreeHashFromCommit(username, repoName, sourceCommit);
+        String targetTree = getTreeHashFromCommit(username, repoName, targetCommit);
+        Map<String, String> sourceBlobs = new HashMap<>();
+        Map<String, String> targetBlobs = new HashMap<>();
+        if (sourceTree != null) collectBlobsFromTree(username, repoName, sourceTree, "", sourceBlobs);
+        if (targetTree != null) collectBlobsFromTree(username, repoName, targetTree, "", targetBlobs);
+
+        // Find common ancestor and its blobs (for 3-way conflict detection)
+        String ancestorCommit = findCommonAncestor(username, repoName, sourceCommit, targetCommit);
+        Map<String, String> ancestorBlobs = new HashMap<>();
+        if (ancestorCommit != null) {
+            String ancestorTree = getTreeHashFromCommit(username, repoName, ancestorCommit);
+            if (ancestorTree != null) collectBlobsFromTree(username, repoName, ancestorTree, "", ancestorBlobs);
+        }
+
+        // Compute diff stats and conflict files
+        Set<String> allPaths = new HashSet<>();
+        allPaths.addAll(sourceBlobs.keySet());
+        allPaths.addAll(targetBlobs.keySet());
+
+        List<String> conflictedFiles = new ArrayList<>();
+        List<String> changedFiles = new ArrayList<>();
+        int linesAdded = 0, linesRemoved = 0;
+
+        for (String path : allPaths) {
+            String s = sourceBlobs.get(path);
+            String t = targetBlobs.get(path);
+            String a = ancestorBlobs.get(path); // null if ancestor doesn't have this file
+
+            boolean sourceChanged = !java.util.Objects.equals(s, a);
+            boolean targetChanged = !java.util.Objects.equals(t, a);
+
+            if (sourceChanged) {
+                changedFiles.add(path);
+                // Count lines in source blob
+                if (s != null) {
+                    byte[] content = readBlobContent(username, repoName, s);
+                    if (content != null && RepoFileService.isTextFile(path)) {
+                        linesAdded += countLines(new String(content, StandardCharsets.UTF_8));
+                    }
+                }
+                if (a != null) {
+                    byte[] oldContent = readBlobContent(username, repoName, a);
+                    if (oldContent != null && RepoFileService.isTextFile(path)) {
+                        linesRemoved += countLines(new String(oldContent, StandardCharsets.UTF_8));
+                    }
+                }
+
+                // 3-way conflict: both sides changed same file differently
+                if (targetChanged && !java.util.Objects.equals(s, t)) {
+                    conflictedFiles.add(path);
+                }
+            }
+        }
+
+        int totalFilesChanged = changedFiles.size();
+
+        // Risk analysis
+        String riskLevel;
+        List<String> riskReasons = new ArrayList<>();
+        List<String> riskRecommendations = new ArrayList<>();
+
+        if (!conflictedFiles.isEmpty()) {
+            riskLevel = "HIGH";
+            riskReasons.add("Merge conflicts in " + conflictedFiles.size() + " file(s): " +
+                    String.join(", ", conflictedFiles.subList(0, Math.min(3, conflictedFiles.size()))) +
+                    (conflictedFiles.size() > 3 ? " ..." : ""));
+            riskRecommendations.add("Resolve all conflicts before merging");
+            riskRecommendations.add("Use 'vega merge --ai' for AI-assisted conflict resolution");
+        } else if (linesAdded + linesRemoved > 500 || totalFilesChanged > 10) {
+            riskLevel = "HIGH";
+            if (linesAdded + linesRemoved > 500)
+                riskReasons.add("Large change: " + (linesAdded + linesRemoved) + " total lines affected");
+            if (totalFilesChanged > 10)
+                riskReasons.add("Many files changed: " + totalFilesChanged);
+            riskRecommendations.add("Consider splitting into smaller PRs");
+            riskRecommendations.add("Thorough testing required");
+        } else if (linesAdded + linesRemoved > 100 || totalFilesChanged > 5) {
+            riskLevel = "MEDIUM";
+            if (linesAdded + linesRemoved > 100)
+                riskReasons.add("Moderate change: " + (linesAdded + linesRemoved) + " lines affected");
+            if (totalFilesChanged > 5)
+                riskReasons.add("Multiple files changed: " + totalFilesChanged);
+            riskRecommendations.add("Review changes carefully before merging");
+        } else {
+            riskLevel = "LOW";
+            riskReasons.add("Small, focused change (" + totalFilesChanged + " file(s), " + linesAdded + " lines added)");
+        }
+
+        // Get commits in source not in target
+        List<String> commitHashes = getCommitsInSource(username, repoName, sourceCommit, targetCommit, 20);
+
+        String diffSummary = "Files: " + totalFilesChanged + ", +" + linesAdded + " -" + linesRemoved +
+                (conflictedFiles.isEmpty() ? "" : ", conflicts: " + conflictedFiles.size());
+
+        // Generate PR ID
+        String prId = getNextPrId(username, repoName);
+        long now = System.currentTimeMillis();
+
+        // Build JSON
+        ObjectNode prJson = PR_MAPPER.createObjectNode();
+        prJson.put("id", prId);
+        prJson.put("author", author);
+        prJson.put("sourceBranch", sourceBranch);
+        prJson.put("targetBranch", targetBranch);
+        prJson.put("createdTimestamp", now);
+        prJson.put("status", "OPEN");
+        if (description != null && !description.isBlank()) prJson.put("description", description);
+        prJson.put("diffSummary", diffSummary);
+        prJson.put("hasConflicts", !conflictedFiles.isEmpty());
+        prJson.putPOJO("conflictedFiles", conflictedFiles);
+        prJson.putPOJO("commitHashes", commitHashes);
+        prJson.put("summaryFilesChanged", totalFilesChanged);
+        prJson.put("summaryLinesAdded", linesAdded);
+        prJson.put("summaryLinesRemoved", linesRemoved);
+        prJson.put("riskLevel", riskLevel);
+        prJson.putPOJO("riskReasons", riskReasons);
+        prJson.putPOJO("riskRecommendations", riskRecommendations);
+
+        // Save to HDFS
+        Path prDir = new Path(basePath + "/" + username + "/" + repoName + "/.pr");
+        Path prPath = new Path(prDir + "/" + prId + ".json");
+        try {
+            if (!fileSystem.exists(prDir)) fileSystem.mkdirs(prDir);
+            byte[] bytes = PR_MAPPER.writeValueAsBytes(prJson);
+            try (FSDataOutputStream out = fileSystem.create(prPath, true)) {
+                out.write(bytes);
+            }
+        } catch (Exception e) {
+            log.error("Failed to save PR {} to HDFS: {}", prId, e.getMessage());
+            throw new RuntimeException("Failed to create PR: " + e.getMessage());
+        }
+
+        return PrDto.builder()
+                .id(prId)
+                .sourceBranch(sourceBranch)
+                .targetBranch(targetBranch)
+                .author(author)
+                .description(description)
+                .status("OPEN")
+                .createdTimestamp(now)
+                .commitHashes(commitHashes.isEmpty() ? null : commitHashes)
+                .diffSummary(diffSummary)
+                .hasConflicts(!conflictedFiles.isEmpty())
+                .conflictedFiles(conflictedFiles.isEmpty() ? null : conflictedFiles)
+                .summaryFilesChanged(totalFilesChanged)
+                .summaryLinesAdded(linesAdded)
+                .summaryLinesRemoved(linesRemoved)
+                .riskLevel(riskLevel)
+                .riskReasons(riskReasons)
+                .riskRecommendations(riskRecommendations)
+                .build();
+    }
+
+    /** Find common ancestor commit of two commits using BFS. */
+    private String findCommonAncestor(String username, String repoName, String commit1, String commit2) {
+        Set<String> ancestors1 = new LinkedHashSet<>();
+        java.util.Deque<String> q1 = new java.util.ArrayDeque<>();
+        q1.add(commit1);
+        while (!q1.isEmpty() && ancestors1.size() < 500) {
+            String c = q1.poll();
+            if (c == null || ancestors1.contains(c)) continue;
+            ancestors1.add(c);
+            String p = getParentHashFromCommit(username, repoName, c);
+            if (p != null) q1.add(p);
+        }
+        // Walk commit2 chain, return first found in ancestors1
+        String current = commit2;
+        Set<String> visited = new HashSet<>();
+        while (current != null && !visited.contains(current)) {
+            if (ancestors1.contains(current)) return current;
+            visited.add(current);
+            current = getParentHashFromCommit(username, repoName, current);
+        }
+        return null;
+    }
+
+    /** Collect commits reachable from sourceCommit but not from targetCommit (max limit). */
+    private List<String> getCommitsInSource(String username, String repoName,
+                                             String sourceCommit, String targetCommit, int limit) {
+        // Collect all commits reachable from target
+        Set<String> targetAncestors = new HashSet<>();
+        java.util.Deque<String> tq = new java.util.ArrayDeque<>();
+        tq.add(targetCommit);
+        while (!tq.isEmpty() && targetAncestors.size() < 1000) {
+            String c = tq.poll();
+            if (c == null || targetAncestors.contains(c)) continue;
+            targetAncestors.add(c);
+            String p = getParentHashFromCommit(username, repoName, c);
+            if (p != null) tq.add(p);
+        }
+        // Walk source, collect commits not in target
+        List<String> result = new ArrayList<>();
+        java.util.Deque<String> sq = new java.util.ArrayDeque<>();
+        sq.add(sourceCommit);
+        Set<String> visited = new HashSet<>();
+        while (!sq.isEmpty() && result.size() < limit) {
+            String c = sq.poll();
+            if (c == null || visited.contains(c) || targetAncestors.contains(c)) continue;
+            visited.add(c);
+            result.add(c);
+            String p = getParentHashFromCommit(username, repoName, c);
+            if (p != null) sq.add(p);
+        }
+        return result;
+    }
+
+    /** Generate next PR-xxx id by scanning existing PR files. */
+    private String getNextPrId(String username, String repoName) {
+        Path prDir = new Path(basePath + "/" + username + "/" + repoName + "/.pr");
+        int maxId = 0;
+        try {
+            if (fileSystem.exists(prDir)) {
+                FileStatus[] statuses = fileSystem.listStatus(prDir);
+                for (FileStatus s : statuses) {
+                    String name = s.getPath().getName();
+                    if (name.matches("PR-\\d+\\.json")) {
+                        int id = Integer.parseInt(name.replace("PR-", "").replace(".json", ""));
+                        maxId = Math.max(maxId, id);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not determine next PR id: {}", e.getMessage());
+        }
+        return "PR-" + String.format("%03d", maxId + 1);
+    }
+
+    /** Count newline-delimited lines in a string. */
+    private int countLines(String text) {
+        if (text == null || text.isEmpty()) return 0;
+        int count = 1;
+        for (char c : text.toCharArray()) if (c == '\n') count++;
+        return count;
+    }
 
     /**
      * Update PR status: review (REVIEWING), approve (APPROVED), reject (REJECTED).
      * Writes back to HDFS repo/.pr/PR-xxx.json.
      */
     public boolean updatePullRequestReview(String username, String repoName, String prId, String reviewer) {
-        return updatePrStatus(username, repoName, prId, "REVIEWING", reviewer, true, false);
+        return updatePrStatus(username, repoName, prId, "REVIEWING", "reviewedBy", reviewer, true, false);
     }
 
     public boolean updatePullRequestApprove(String username, String repoName, String prId, String approver) {
-        return updatePrStatus(username, repoName, prId, "APPROVED", approver, false, true);
+        return updatePrStatus(username, repoName, prId, "APPROVED", "approvedBy", approver, false, true);
     }
 
     public boolean updatePullRequestReject(String username, String repoName, String prId, String rejector) {
-        return updatePrStatus(username, repoName, prId, "REJECTED", null, false, true);
+        return updatePrStatus(username, repoName, prId, "REJECTED", "rejectedBy", rejector, false, true);
     }
 
     /**
      * Merge PR (fast-forward only). Updates target branch to source commit and sets PR status to MERGED.
      * Requires PR to be APPROVED and have no conflicts.
      */
-    public String mergePullRequest(String username, String repoName, String prId) {
+    public String mergePullRequest(String username, String repoName, String prId, String mergedBy) {
         PrDto pr = getPullRequest(username, repoName, prId);
         if (pr == null) return "PR not found";
         if (!"APPROVED".equals(pr.getStatus())) return "PR must be approved first";
@@ -959,7 +1231,7 @@ public class RepoService {
                     out.write((mergeCommitHash + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 }
             }
-            updatePrStatusToMerged(username, repoName, prId);
+            updatePrStatusToMerged(username, repoName, prId, mergedBy);
             return null;
         } catch (Exception e) {
             log.error("Failed to merge PR {}: {}", prId, e.getMessage());
@@ -1108,7 +1380,7 @@ public class RepoService {
         return false;
     }
 
-    private void updatePrStatusToMerged(String username, String repoName, String prId) {
+    private void updatePrStatusToMerged(String username, String repoName, String prId, String mergedBy) {
         String normId = prId.toUpperCase().startsWith("PR-") ? prId : "PR-" + prId;
         Path prPath = new Path(basePath + "/" + username + "/" + repoName + "/.pr/" + normId + ".json");
         try {
@@ -1117,6 +1389,8 @@ public class RepoService {
             if (content == null) return;
             ObjectNode root = (ObjectNode) PR_MAPPER.readTree(content);
             root.put("status", "MERGED");
+            if (mergedBy != null) root.put("mergedBy", mergedBy);
+            root.put("reviewCompletedAt", System.currentTimeMillis());
             byte[] bytes = PR_MAPPER.writeValueAsBytes(root);
             try (org.apache.hadoop.fs.FSDataOutputStream out = fileSystem.create(prPath, true)) {
                 out.write(bytes);
@@ -1127,7 +1401,8 @@ public class RepoService {
     }
 
     private boolean updatePrStatus(String username, String repoName, String prId,
-                                   String newStatus, String approvedBy, boolean setReviewStarted, boolean setReviewCompleted) {
+                                   String newStatus, String actorFieldName, String actorUsername,
+                                   boolean setReviewStarted, boolean setReviewCompleted) {
         String normId = prId.toUpperCase().startsWith("PR-") ? prId : "PR-" + prId;
         Path prPath = new Path(basePath + "/" + username + "/" + repoName + "/.pr/" + normId + ".json");
         try {
@@ -1139,7 +1414,7 @@ public class RepoService {
             if ("MERGED".equals(current) || "REJECTED".equals(current)) return false;
             if ("APPROVED".equals(newStatus) && !"OPEN".equals(current) && !"REVIEWING".equals(current)) return false;
             root.put("status", newStatus);
-            if (approvedBy != null) root.put("approvedBy", approvedBy);
+            if (actorFieldName != null && actorUsername != null) root.put(actorFieldName, actorUsername);
             long now = System.currentTimeMillis();
             if (setReviewStarted) root.put("reviewStartedAt", now);
             if (setReviewCompleted) root.put("reviewCompletedAt", now);

@@ -587,20 +587,142 @@
 }
 
 .conflictBadge {
+  padding: 0.15rem 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: rgba(239, 68, 68, 0.15);
   color: var(--error);
 }
 
+.statusOpen {
+  padding: 0.15rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  background: rgba(99, 179, 237, 0.15);
+  color: #63b3ed;
+}
+
+.statusReviewing {
+  padding: 0.15rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
 .statusApproved {
+  padding: 0.15rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  background: rgba(34, 197, 94, 0.15);
   color: var(--success);
 }
 
 .statusRejected {
+  padding: 0.15rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  background: rgba(239, 68, 68, 0.15);
   color: var(--error);
 }
 
 .statusMerged {
-  color: var(--accent);
+  padding: 0.15rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
 }
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.sectionHeader h3 {
+  margin: 0;
+}
+
+.createPrBtn {
+  padding: var(--space-2) var(--space-4);
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.createPrBtn:hover { opacity: 0.88; }
+
+.emptyPrs {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.emptyPrLink {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.prRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-1);
+}
+
+.prDesc {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.prMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  flex-wrap: wrap;
+}
+
+.branchChip {
+  padding: 0.1rem 0.4rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.prAuthor {
+  color: var(--text-tertiary);
+}
+
+.prStats {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.riskHigh   { padding: 0.1rem 0.35rem; font-size: 0.72rem; font-weight: 700; border-radius: var(--radius-sm); background: rgba(239,68,68,0.15); color: var(--error); }
+.riskMedium { padding: 0.1rem 0.35rem; font-size: 0.72rem; font-weight: 700; border-radius: var(--radius-sm); background: rgba(245,158,11,0.15); color: #f59e0b; }
+.riskLow    { padding: 0.1rem 0.35rem; font-size: 0.72rem; font-weight: 700; border-radius: var(--radius-sm); background: rgba(34,197,94,0.15); color: var(--success); }
 
 /* ── Public/Private Badge ── */
 .badgePublic,

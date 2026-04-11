@@ -450,18 +450,52 @@ export default function RepoDetailPage() {
 
       {activeTab === 'prs' && (
         <section className={styles.section}>
-          <h3>Pull Requests (from HDFS)</h3>
+          <div className={styles.sectionHeader}>
+            <h3>Pull Requests</h3>
+            <Link to={`/repos/${username}/${repoName}/pull-requests/new`} className={styles.createPrBtn}>
+              + New Pull Request
+            </Link>
+          </div>
           {pullRequests.length === 0 ? (
-            <p className={styles.empty}>No pull requests yet.</p>
+            <div className={styles.emptyPrs}>
+              <p>No pull requests yet.</p>
+              <p>
+                <Link to={`/repos/${username}/${repoName}/pull-requests/new`} className={styles.emptyPrLink}>
+                  Create the first pull request
+                </Link>
+                {' '}to propose merging changes between branches.
+              </p>
+            </div>
           ) : (
             <ul className={styles.list}>
               {pullRequests.map((pr) => (
                 <li key={pr.id} className={styles.commit}>
                   <Link to={`/repos/${username}/${repoName}/pull-requests/${pr.id}`} className={styles.prLink}>
                     <div className={styles.commitInfo}>
-                      <strong>{pr.id}</strong> {pr.sourceBranch} &rarr; {pr.targetBranch} · <span className={pr.status === 'APPROVED' ? styles.statusApproved : pr.status === 'REJECTED' ? styles.statusRejected : pr.status === 'MERGED' ? styles.statusMerged : ''}>{pr.status}</span> · {pr.author}
-                      {pr.diffSummary && <p className={styles.meta}>{pr.diffSummary}</p>}
-                      {pr.hasConflicts && <span className={styles.conflictBadge}>Conflicts</span>}
+                      <div className={styles.prRow}>
+                        <strong>{pr.id}</strong>
+                        {pr.description && <span className={styles.prDesc}>{pr.description}</span>}
+                        <span className={pr.status === 'APPROVED' ? styles.statusApproved : pr.status === 'REJECTED' ? styles.statusRejected : pr.status === 'MERGED' ? styles.statusMerged : pr.status === 'REVIEWING' ? styles.statusReviewing : styles.statusOpen}>
+                          {pr.status}
+                        </span>
+                        {pr.hasConflicts && <span className={styles.conflictBadge}>Conflicts</span>}
+                        {pr.riskLevel && (
+                          <span className={pr.riskLevel === 'HIGH' ? styles.riskHigh : pr.riskLevel === 'MEDIUM' ? styles.riskMedium : styles.riskLow}>
+                            {pr.riskLevel}
+                          </span>
+                        )}
+                      </div>
+                      <div className={styles.prMeta}>
+                        <span className={styles.branchChip}>{pr.sourceBranch}</span>
+                        <span>→</span>
+                        <span className={styles.branchChip}>{pr.targetBranch}</span>
+                        <span className={styles.prAuthor}>by {pr.author}</span>
+                        {pr.summaryFilesChanged != null && (
+                          <span className={styles.prStats}>
+                            {pr.summaryFilesChanged} files · <span style={{color:'#22c55e'}}>+{pr.summaryLinesAdded ?? 0}</span> <span style={{color:'#ef4444'}}>-{pr.summaryLinesRemoved ?? 0}</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </Link>
                 </li>

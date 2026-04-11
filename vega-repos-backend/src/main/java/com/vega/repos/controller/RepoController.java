@@ -162,6 +162,37 @@ public class RepoController {
         return ResponseEntity.ok(pr);
     }
 
+    /** Create a new PR from the UI. Body: { sourceBranch, targetBranch, description? } */
+    @PostMapping("/{username}/{repoName}/pull-requests")
+    public ResponseEntity<?> createPullRequest(
+            @RequestHeader(value = "Authorization", required = false) String auth,
+            @PathVariable String username, @PathVariable String repoName,
+            @RequestBody Map<String, String> body) {
+        String currentUser = repoAccessService.resolveUsername(auth);
+        if (currentUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        if (!repoAccessService.canAccess(currentUser, username, repoName)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        String sourceBranch = body.get("sourceBranch");
+        String targetBranch = body.get("targetBranch");
+        String description = body.getOrDefault("description", "");
+        if (sourceBranch == null || sourceBranch.isBlank() || targetBranch == null || targetBranch.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "sourceBranch and targetBranch are required"));
+        }
+        if (sourceBranch.equals(targetBranch)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Source and target branches must be different"));
+        }
+        try {
+            PrDto pr = repoService.createPullRequest(username, repoName, sourceBranch, targetBranch, currentUser, description);
+            return ResponseEntity.status(HttpStatus.CREATED).body(pr);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to create PR: " + e.getMessage()));
+        }
+    }
+
     @GetMapping("/{username}/{repoName}/pull-requests/{prId}/diff")
     public ResponseEntity<CommitDiffDto> getPrDiff(
             @RequestHeader(value = "Authorization", required = false) String auth,
@@ -232,7 +263,7 @@ public class RepoController {
         if (!repoAccessService.canCreateOrApprovePr(currentUser, username, repoName)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        String error = repoService.mergePullRequest(username, repoName, prId);
+        String error = repoService.mergePullRequest(username, repoName, prId, currentUser);
         if (error != null) {
             return ResponseEntity.badRequest().body(Map.of("error", error));
         }

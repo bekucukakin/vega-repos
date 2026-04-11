@@ -7,6 +7,7 @@ import RegisterPage from './pages/RegisterPage'
 import RepoListPage from './pages/RepoListPage'
 import RepoDetailPage from './pages/RepoDetailPage'
 import PullRequestDetailPage from './pages/PullRequestDetailPage'
+import CreatePullRequestPage from './pages/CreatePullRequestPage'
 import CollaboratorRequestsPage from './pages/CollaboratorRequestsPage'
 import CommitMetricsPage from './pages/CommitMetricsPage'
 import PrMetricsPage from './pages/PrMetricsPage'
@@ -104,6 +105,14 @@ function App() {
             element={
               <PrivateRoute>
                 <RepoDetailPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="repos/:username/:repoName/pull-requests/new"
+            element={
+              <PrivateRoute>
+                <CreatePullRequestPage />
               </PrivateRoute>
             }
           />
