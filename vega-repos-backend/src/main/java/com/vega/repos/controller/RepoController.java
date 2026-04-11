@@ -110,6 +110,25 @@ public class RepoController {
         return ResponseEntity.ok(repos);
     }
 
+    /**
+     * Pull Service calls this with the user's JWT before HDFS read.
+     * Public repo → any authenticated user; private → owner or collaborator only.
+     */
+    @GetMapping("/{username}/{repoName}/pull-access")
+    public ResponseEntity<Void> checkPullAccess(
+            @RequestHeader(value = "Authorization", required = false) String auth,
+            @PathVariable String username,
+            @PathVariable String repoName) {
+        String currentUser = repoAccessService.resolveUsername(auth);
+        if (currentUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        if (!repoAccessService.canAccess(currentUser, username, repoName)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/{username}/{repoName}")
     public ResponseEntity<RepoDto> getRepoDetail(
             @RequestHeader(value = "Authorization", required = false) String auth,
