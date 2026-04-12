@@ -262,12 +262,53 @@ public class RepoService {
     public List<BranchDto> getBranches(String username, String repoName) {
         List<BranchDto> branches = new ArrayList<>();
         Path refsHeadsPath = new Path(basePath + "/" + username + "/" + repoName + "/refs/heads");
+        String repoPathStr = basePath + "/" + username + "/" + repoName;
 
         try {
             if (!fileSystem.exists(refsHeadsPath)) {
                 return branches;
             }
-            collectBranchRefs(refsHeadsPath, refsHeadsPath, branches);
+            collectBranchRefs(refsHeadsPath, refsHeadsPath, branches, repoPathStr);
+            for (BranchDto b : branches) {
+                String h = b.getCommitHash();
+                if (h == null || h.isBlank()) {
+                    continue;
+                }
+                h = h.trim().toLowerCase(Locale.ROOT);
+                b.setCommitHash(h);
+                if (h.length() < 38) {
+                    String resolved = resolveToFullHash(username, repoName, h);
+                    if (resolved != null) {
+                        h = resolved.toLowerCase(Locale.ROOT);
+                        b.setCommitHash(h);
+                    }
+                }
+                CommitDto tip = parseCommitObject(username, repoName, h, repoPathStr);
+                if (tip != null) {
+                    b.setTipMessage(tip.getMessage());
+                    b.setTipAuthor(tip.getAuthor());
+                    b.setTipTimestamp(tip.getTimestamp());
+                    b.setTipShortHash(tip.getHash());
+                }
+            }
+            branches.sort((a, b) -> {
+                Long ta = a.getTipTimestamp();
+                Long tb = b.getTipTimestamp();
+                if (ta == null && tb == null) {
+                    return String.valueOf(a.getName()).compareToIgnoreCase(String.valueOf(b.getName()));
+                }
+                if (ta == null) {
+                    return 1;
+                }
+                if (tb == null) {
+                    return -1;
+                }
+                int c = Long.compare(tb, ta);
+                if (c != 0) {
+                    return c;
+                }
+                return String.valueOf(a.getName()).compareToIgnoreCase(String.valueOf(b.getName()));
+            });
         } catch (Exception e) {
             log.error("Failed to list branches for {}/{}", username, repoName, e);
             throw new RuntimeException("Failed to list branches: " + e.getMessage());
@@ -275,20 +316,81 @@ public class RepoService {
         return branches;
     }
 
-    private void collectBranchRefs(Path refsRoot, Path current, List<BranchDto> branches) throws Exception {
+    private void collectBranchRefs(Path refsRoot, Path current, List<BranchDto> branches, String repoRoot) throws Exception {
         FileStatus[] statuses = fileSystem.listStatus(current);
         String rootUri = refsRoot.toUri().getPath();
         for (FileStatus status : statuses) {
             if (status.isFile()) {
                 String fileUri = status.getPath().toUri().getPath();
                 String branchName = fileUri.substring(rootUri.length() + 1);
-                String commitHash = readFileContent(status.getPath());
-                if (commitHash != null) commitHash = commitHash.trim();
+                String rawRef = readFileContent(status.getPath());
+                String commitHash = resolveRefToCommitHash(repoRoot, rawRef, 0);
                 branches.add(BranchDto.builder().name(branchName).commitHash(commitHash).build());
             } else if (status.isDirectory()) {
-                collectBranchRefs(refsRoot, status.getPath(), branches);
+                collectBranchRefs(refsRoot, status.getPath(), branches, repoRoot);
             }
         }
+    }
+
+    /**
+     * Follows symbolic refs (ref: …) to a hex commit id. Tries both {@code repo/refs/…} and {@code repo/.vega/refs/…}.
+     */
+    private String resolveRefToCommitHash(String repoRoot, String raw, int depth) {
+        if (raw == null || depth > 16) {
+            return null;
+        }
+        String t = raw.trim();
+        if (t.isEmpty()) {
+            return null;
+        }
+        if (t.startsWith("ref: ")) {
+            String ref = t.substring(5).trim();
+            Path[] candidates = {
+                    new Path(repoRoot + "/" + ref),
+                    new Path(repoRoot + "/.vega/" + ref),
+            };
+            for (Path p : candidates) {
+                try {
+                    if (fileSystem.exists(p)) {
+                        String next = readFileContent(p);
+                        return resolveRefToCommitHash(repoRoot, next, depth + 1);
+                    }
+                } catch (Exception ignored) {
+                    // try next
+                }
+            }
+            return null;
+        }
+        String hex = t.split("\\s+")[0].trim().toLowerCase(Locale.ROOT);
+        if (hex.matches("[a-f0-9]{4,40}")) {
+            return hex;
+        }
+        return null;
+    }
+
+    /** Vega objects may live at {@code ab/cd…}, {@code .vega/objects/ab/cd…}, or legacy {@code objects/ab/cd…}. */
+    private Path findCommitObjectPath(String repoPathStr, String hash) {
+        if (hash == null || hash.length() < 4) {
+            return null;
+        }
+        String h = hash.trim().toLowerCase(Locale.ROOT);
+        String shortH = h.substring(0, 2);
+        String rest = h.substring(2);
+        Path[] candidates = {
+                new Path(repoPathStr + "/" + shortH + "/" + rest),
+                new Path(repoPathStr + "/.vega/objects/" + shortH + "/" + rest),
+                new Path(repoPathStr + "/objects/" + shortH + "/" + rest),
+        };
+        for (Path p : candidates) {
+            try {
+                if (fileSystem.exists(p)) {
+                    return p;
+                }
+            } catch (Exception ignored) {
+                // continue
+            }
+        }
+        return null;
     }
 
     public List<CommitDto> getCommits(String username, String repoName, int limit) {
@@ -707,6 +809,7 @@ public class RepoService {
     /** Resolve short hash (e.g. 12 chars) to full hash by scanning object shard. */
     private String resolveToFullHash(String username, String repoName, String shortHash) {
         if (shortHash == null || shortHash.length() < 4) return null;
+        shortHash = shortHash.trim().toLowerCase(Locale.ROOT);
         if (shortHash.length() >= 38) return shortHash; // likely already full
         try {
             Path shardDir = new Path(basePath + "/" + username + "/" + repoName + "/" + shortHash.substring(0, 2));
@@ -767,11 +870,12 @@ public class RepoService {
 
     private CommitDto parseCommitObject(String username, String repoName, String hash, String repoPathStr) {
         try {
-            String shortHash = hash.length() > 2 ? hash.substring(0, 2) : hash;
-            String restHash = hash.length() > 2 ? hash.substring(2) : "";
-            Path objectPath = new Path(repoPathStr + "/" + shortHash + "/" + restHash);
-
-            if (!fileSystem.exists(objectPath)) {
+            if (hash == null || hash.isBlank()) {
+                return null;
+            }
+            hash = hash.trim().toLowerCase(Locale.ROOT);
+            Path objectPath = findCommitObjectPath(repoPathStr, hash);
+            if (objectPath == null) {
                 return null;
             }
 
@@ -801,21 +905,29 @@ public class RepoService {
         long timestamp = 0L;
         String parentHash = null;
 
-        for (String line : content.split("\\r?\\n")) {
+        content = content.replace("\r", "");
+
+        // Author line: VEGA CommitObj — last whitespace-separated token is epoch seconds (see CommitObj.getStorageBytes)
+        for (String line : content.split("\n")) {
             if (line.startsWith("parent ")) {
                 parentHash = line.substring(7).trim();
+            } else if (line.startsWith("author ")) {
+                String authorLine = line.substring(7).trim().replaceAll("\\s+", " ");
+                if (!authorLine.isEmpty()) {
+                    String[] parts = authorLine.split(" ");
+                    if (parts.length >= 2) {
+                        try {
+                            long sec = Long.parseLong(parts[parts.length - 1]);
+                            timestamp = sec * 1000L;
+                            authorLine = String.join(" ", Arrays.copyOfRange(parts, 0, parts.length - 1)).trim();
+                        } catch (NumberFormatException ignored) {
+                            // keep authorLine as full string
+                        }
+                    }
+                    int emailStart = authorLine.indexOf(" <");
+                    author = emailStart > 0 ? authorLine.substring(0, emailStart).trim() : authorLine;
+                }
             }
-        }
-
-        Pattern authorPattern = Pattern.compile("author\\s+(.+?)\\s+(\\d+)(?:\\s|$)", Pattern.MULTILINE);
-        Matcher authorMatcher = authorPattern.matcher(content);
-        if (authorMatcher.find()) {
-            String authorPart = authorMatcher.group(1).trim();
-            int emailStart = authorPart.indexOf(" <");
-            author = emailStart > 0 ? authorPart.substring(0, emailStart) : authorPart;
-            try {
-                timestamp = Long.parseLong(authorMatcher.group(2)) * 1000;
-            } catch (NumberFormatException ignored) {}
         }
 
         int msgStart = content.indexOf("\n\n");
@@ -890,6 +1002,74 @@ public class RepoService {
             if (pr.getId().equalsIgnoreCase(norm) || pr.getId().equalsIgnoreCase(prId)) return pr;
         }
         return null;
+    }
+
+    /**
+     * Recompute 3-way merge conflicts from current branch tips (source vs target vs common ancestor).
+     * PR JSON stores conflicts only at creation time; target can move forward and conflicts must be live.
+     */
+    private List<String> computeThreeWayConflictedFiles(String username, String repoName,
+                                                          String sourceBranch, String targetBranch) {
+        String sourceCommit = getCommitHashForBranch(username, repoName, sourceBranch);
+        String targetCommit = getCommitHashForBranch(username, repoName, targetBranch);
+        if (sourceCommit == null || targetCommit == null) {
+            return Collections.emptyList();
+        }
+        if (sourceCommit.equals(targetCommit)) {
+            return Collections.emptyList();
+        }
+        String sourceTree = getTreeHashFromCommit(username, repoName, sourceCommit);
+        String targetTree = getTreeHashFromCommit(username, repoName, targetCommit);
+        Map<String, String> sourceBlobs = new HashMap<>();
+        Map<String, String> targetBlobs = new HashMap<>();
+        if (sourceTree != null) {
+            collectBlobsFromTree(username, repoName, sourceTree, "", sourceBlobs);
+        }
+        if (targetTree != null) {
+            collectBlobsFromTree(username, repoName, targetTree, "", targetBlobs);
+        }
+        String ancestorCommit = findCommonAncestor(username, repoName, sourceCommit, targetCommit);
+        Map<String, String> ancestorBlobs = new HashMap<>();
+        if (ancestorCommit != null) {
+            String ancestorTree = getTreeHashFromCommit(username, repoName, ancestorCommit);
+            if (ancestorTree != null) {
+                collectBlobsFromTree(username, repoName, ancestorTree, "", ancestorBlobs);
+            }
+        }
+        Set<String> allPaths = new HashSet<>();
+        allPaths.addAll(sourceBlobs.keySet());
+        allPaths.addAll(targetBlobs.keySet());
+        List<String> conflictedFiles = new ArrayList<>();
+        for (String path : allPaths) {
+            String s = sourceBlobs.get(path);
+            String t = targetBlobs.get(path);
+            String a = ancestorBlobs.get(path);
+            boolean sourceChanged = !Objects.equals(s, a);
+            boolean targetChanged = !Objects.equals(t, a);
+            if (sourceChanged && targetChanged && !Objects.equals(s, t)) {
+                conflictedFiles.add(path);
+            }
+        }
+        return conflictedFiles;
+    }
+
+    /** Updates {@code hasConflicts} / {@code conflictedFiles} from current repo state (not terminal PRs). */
+    private void refreshPrMergeConflictState(String username, String repoName, PrDto pr) {
+        if (pr == null || pr.getSourceBranch() == null || pr.getTargetBranch() == null) {
+            return;
+        }
+        String st = pr.getStatus();
+        if (st != null && ("MERGED".equalsIgnoreCase(st) || "REJECTED".equalsIgnoreCase(st))) {
+            return;
+        }
+        try {
+            List<String> fresh = computeThreeWayConflictedFiles(username, repoName,
+                    pr.getSourceBranch(), pr.getTargetBranch());
+            pr.setHasConflicts(fresh != null && !fresh.isEmpty());
+            pr.setConflictedFiles(fresh == null || fresh.isEmpty() ? null : fresh);
+        } catch (Exception e) {
+            log.debug("refreshPrMergeConflictState {}: {}", pr.getId(), e.getMessage());
+        }
     }
 
     /** Get diff between source and target branch (for PR: target=base, source=head). */
@@ -1023,7 +1203,9 @@ public class RepoService {
                     try {
                         JsonNode n = mapper.readTree(content);
                         String fallbackId = status.getPath().getName().replace(".json", "");
-                        prs.add(parsePrNode(n, fallbackId));
+                        PrDto pr = parsePrNode(n, fallbackId);
+                        refreshPrMergeConflictState(username, repoName, pr);
+                        prs.add(pr);
                     } catch (Exception e) {
                         log.debug("Failed to parse PR file {}: {}", status.getPath(), e.getMessage());
                     }
@@ -1897,7 +2079,9 @@ public class RepoService {
                 String mergeTreeHash = writeTreeFromBlobMap(username, repoName, mergedBlobs, "");
                 if (mergeTreeHash == null) return "Failed to create merge tree";
 
-                String author = getAuthorFromCommit(username, repoName, sourceCommit);
+                String author = (mergedBy != null && !mergedBy.isBlank())
+                        ? mergedBy.trim()
+                        : getAuthorFromCommit(username, repoName, sourceCommit);
                 if (author == null || author.isEmpty()) author = "VEGA UI";
                 String mergeMessage = "Merge branch '" + pr.getSourceBranch() + "' into " + pr.getTargetBranch();
                 long timestamp = System.currentTimeMillis() / 1000;
