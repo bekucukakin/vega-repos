@@ -97,6 +97,30 @@
   margin-bottom: var(--space-4);
 }
 
+/* Insights tab: upfront merge-blocked notice (pairs with live API conflict refresh) */
+.mergeConflictMetricsBanner {
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+}
+
+.mergeConflictMetricsBanner strong {
+  display: block;
+  font-size: 1rem;
+  color: var(--error);
+  margin-bottom: var(--space-2);
+}
+
+.mergeConflictMetricsBanner p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 .conflictIcon {
   font-size: 1.2rem;
   flex-shrink: 0;

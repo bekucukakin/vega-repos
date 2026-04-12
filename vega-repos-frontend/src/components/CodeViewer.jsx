@@ -98,7 +98,7 @@ export default function CodeViewer({ path, content, binary }) {
           language={lang}
           style={oneDark}
           showLineNumbers
-          wrapLongLines
+          wrapLongLines={false}
           customStyle={{
             margin: 0,
             padding: '16px 20px',
@@ -106,6 +106,7 @@ export default function CodeViewer({ path, content, binary }) {
             lineHeight: 1.6,
             background: '#0d1117',
             minHeight: '100%',
+            whiteSpace: 'pre',
           }}
           codeTagProps={{ style: { fontFamily: 'var(--font-mono), monospace' } }}
           lineNumberStyle={{ minWidth: '2.5em', opacity: 0.5, paddingRight: '1em' }}

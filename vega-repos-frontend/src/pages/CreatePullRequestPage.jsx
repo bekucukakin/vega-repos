@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import styles from './CreatePullRequestPage.module.css'
 
@@ -15,6 +15,7 @@ export default function CreatePullRequestPage() {
   const { username, repoName } = useParams()
   const { token } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const [branches, setBranches] = useState([])
   const [branchesLoading, setBranchesLoading] = useState(true)
@@ -39,6 +40,8 @@ export default function CreatePullRequestPage() {
   ]
 
   const headers = useMemo(() => (token ? { Authorization: `Bearer ${token}` } : {}), [token])
+  const prQuerySource = searchParams.get('source') ?? ''
+  const prQueryTarget = searchParams.get('target') ?? ''
 
   useEffect(() => {
     if (!username || !repoName) return
@@ -48,12 +51,17 @@ export default function CreatePullRequestPage() {
       .then((data) => {
         const list = Array.isArray(data) ? data : []
         setBranches(list)
-        // Default: target = main or master, source = first non-main branch
         const mainBranch = list.find(b => b.name === 'main' || b.name === 'master')
-        if (mainBranch) setTargetBranch(mainBranch.name)
+        let target = mainBranch?.name || 'main'
+        if (prQueryTarget && list.some((b) => b.name === prQueryTarget)) target = prQueryTarget
+        setTargetBranch(target)
+
+        let source = ''
         const others = list.filter(b => b.name !== 'main' && b.name !== 'master')
-        if (others.length > 0) setSourceBranch(others[0].name)
-        else if (list.length > 1) setSourceBranch(list[1].name)
+        if (others.length > 0) source = others[0].name
+        else if (list.length > 1) source = list[1].name
+        if (prQuerySource && list.some((b) => b.name === prQuerySource)) source = prQuerySource
+        setSourceBranch(source)
       })
       .catch(() => setBranches([]))
       .finally(() => setBranchesLoading(false))
@@ -65,7 +73,7 @@ export default function CreatePullRequestPage() {
         setReviewers(list.filter(c => c.role === 'reviewer'))
       })
       .catch(() => setReviewers([]))
-  }, [username, repoName, headers])
+  }, [username, repoName, headers, prQuerySource, prQueryTarget])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

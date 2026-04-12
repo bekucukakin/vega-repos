@@ -1,23 +1,35 @@
 .tree {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 1px;
+  /* İçerik kadar genişle; panel dar ise yatay kaydırma ile tam ad görünsün */
+  width: max-content;
+  min-width: 100%;
+  box-sizing: border-box;
 }
 
 .node {
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: max-content;
+  max-width: none;
 }
 
 .item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
+  gap: 8px;
+  width: auto;
+  max-width: none;
   padding: 8px 12px;
   background: transparent;
   border: none;
   color: var(--text-secondary);
   font-size: 13px;
+  line-height: 1.45;
   font-family: var(--font-mono);
   text-align: left;
   cursor: pointer;
@@ -54,16 +66,19 @@
 }
 
 .name {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: none;
   white-space: nowrap;
   font-size: 13px;
+  line-height: 1.45;
 }
 
 .children {
-  padding-left: 16px;
-  margin-left: 12px;
+  padding-left: 12px;
+  margin-left: 10px;
   border-left: 1px solid var(--border-subtle);
+  width: max-content;
+  max-width: none;
+  box-sizing: border-box;
 }
 
 .empty {

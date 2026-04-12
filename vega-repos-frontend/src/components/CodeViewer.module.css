@@ -57,11 +57,13 @@
 .code {
   flex: 1;
   overflow: auto;
+  overflow-x: auto;
   background: #0d1117;
 }
 
 .code pre {
   margin: 0 !important;
+  min-width: max-content;
 }
 
 .placeholder {

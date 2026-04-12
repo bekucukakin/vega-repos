@@ -392,6 +392,15 @@ export default function PullRequestDetailPage() {
           {/* Insights tab */}
           {activeTab === 'insights' && (
             <div className={styles.insightsSection}>
+              {!isTerminal && pr.hasConflicts && (
+                <div className={styles.mergeConflictMetricsBanner} role="alert">
+                  <strong>Merge not possible</strong>
+                  <p>
+                    This pull request currently has merge conflicts (source and target both changed the same paths).
+                    Resolve them with the VEGA CLI before merging. The row below stays in sync with the repository.
+                  </p>
+                </div>
+              )}
               {/* ── Risk Overview ── */}
               <div className={styles.insightsBlock}>
                 <div className={styles.riskScoreHeader}>
@@ -434,6 +443,28 @@ export default function PullRequestDetailPage() {
                   <p className={styles.empty}>No analysis data. Create PR from UI for full analysis.</p>
                 )}
 
+                {/* ── Merge conflicts: always shown for open PRs (not only when riskScore exists) ── */}
+                {!isTerminal && (
+                  <div className={styles.metricTable}>
+                    <MetricRow
+                      tag="CONFLICTS"
+                      label="Merge conflicts (live)"
+                      value={
+                        pr.hasConflicts
+                          ? `${pr.conflictedFiles?.length ?? 0} conflict${(pr.conflictedFiles?.length ?? 0) !== 1 ? 's' : ''}`
+                          : 'Clean'
+                      }
+                      detail={
+                        pr.hasConflicts
+                          ? 'Source and target both modified these paths vs. common ancestor — merge is blocked until resolved'
+                          : 'No 3-way merge conflicts at current branch tips'
+                      }
+                      warn={!!pr.hasConflicts}
+                      statusText={pr.hasConflicts ? 'BLOCKED' : 'OK'}
+                    />
+                  </div>
+                )}
+
                 {/* ── Metric Table ── */}
                 {pr.riskScore != null && (
                   <div className={styles.metricTable}>
@@ -457,13 +488,6 @@ export default function PullRequestDetailPage() {
                       detail={pr.criticalPatternFiles?.slice(0, 2).join(', ') || 'No auth/secret/key paths'}
                       warn={pr.criticalPatternFiles?.length > 0}
                       statusText={pr.criticalPatternFiles?.length > 0 ? 'WARN' : 'OK'}
-                    />
-                    <MetricRow
-                      tag="CONFLICTS" label="Merge Conflicts"
-                      value={pr.hasConflicts ? `${pr.conflictedFiles?.length ?? 0} conflict${(pr.conflictedFiles?.length ?? 0) !== 1 ? 's' : ''}` : 'Clean'}
-                      detail={pr.hasConflicts ? '3-way merge check detected issues' : 'No 3-way merge conflicts'}
-                      warn={pr.hasConflicts}
-                      statusText={pr.hasConflicts ? 'CONFLICT' : 'OK'}
                     />
                     <MetricRow
                       tag="CHURN" label="Change Concentration"

@@ -20,6 +20,77 @@ const BRANCH_COLORS = [
   '#f97316',
 ]
 
+/** GitHub-style "Updated 3 days ago" (no extra deps) */
+function formatRelativeUpdated(ts) {
+  if (ts == null || ts === 0) return '—'
+  const diff = Date.now() - ts
+  if (diff < 0) return formatBranchTipDateStatic(ts)
+  const sec = Math.floor(diff / 1000)
+  if (sec < 45) return 'now'
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`
+  const day = Math.floor(hr / 24)
+  if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`
+  const mon = Math.floor(day / 30)
+  if (mon < 12) return `${mon} month${mon === 1 ? '' : 's'} ago`
+  const yr = Math.floor(day / 365)
+  return `${yr} year${yr === 1 ? '' : 's'} ago`
+}
+
+function formatBranchTipDateStatic(ts) {
+  if (ts == null || ts === 0) return '—'
+  try {
+    return new Date(ts).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  } catch {
+    return '—'
+  }
+}
+
+function isOpenPipelinePrStatus(status) {
+  const u = String(status || '').toUpperCase()
+  return u === 'OPEN' || u === 'REVIEWING' || u === 'APPROVED'
+}
+
+function prStatusBadgeClass(styles, status) {
+  const u = String(status || '').toUpperCase()
+  if (u === 'APPROVED') return styles.statusApproved
+  if (u === 'REJECTED') return styles.statusRejected
+  if (u === 'MERGED') return styles.statusMerged
+  if (u === 'REVIEWING') return styles.statusReviewing
+  return styles.statusOpen
+}
+
+/** Newest PR per source branch: prefer open pipeline, then merged, else most recent. */
+function buildPrBySourceBranch(pullRequests) {
+  const by = new Map()
+  for (const pr of pullRequests || []) {
+    const src = pr.sourceBranch
+    if (!src) continue
+    if (!by.has(src)) by.set(src, [])
+    by.get(src).push(pr)
+  }
+  const out = new Map()
+  for (const [src, arr] of by) {
+    const sorted = [...arr].sort((a, b) => (b.createdTimestamp || 0) - (a.createdTimestamp || 0))
+    const active = sorted.find((p) => isOpenPipelinePrStatus(p.status))
+    if (active) {
+      out.set(src, active)
+      continue
+    }
+    const merged = sorted.find((p) => String(p.status || '').toUpperCase() === 'MERGED')
+    out.set(src, merged || sorted[0])
+  }
+  return out
+}
+
+function truncatePrDesc(s, max = 36) {
+  if (!s || !String(s).trim()) return ''
+  const t = String(s).trim()
+  return t.length <= max ? t : `${t.slice(0, max - 1)}…`
+}
+
 function buildGraphLayout(commits) {
   if (!commits || commits.length === 0) return []
 
@@ -146,6 +217,7 @@ export default function RepoDetailPage() {
   const [accessDenied, setAccessDenied] = useState(false)
   const [requestAccessSent, setRequestAccessSent] = useState(false)
   const [pullRequests, setPullRequests] = useState([])
+  const [branchSearch, setBranchSearch] = useState('')
   const [selectedCommit, setSelectedCommit] = useState(null)
   const [commitDiff, setCommitDiff] = useState(null)
   const [diffLoading, setDiffLoading] = useState(false)
@@ -189,6 +261,32 @@ export default function RepoDetailPage() {
       setLoading(false)
     }
   }, [username, repoName, headers])
+
+  const defaultBranchName = useMemo(() => {
+    if (!branches?.length) return 'master'
+    if (branches.some((b) => b.name === 'master')) return 'master'
+    if (branches.some((b) => b.name === 'main')) return 'main'
+    return branches[0].name
+  }, [branches])
+
+  const filteredBranchesGh = useMemo(() => {
+    const q = branchSearch.trim().toLowerCase()
+    const list = q
+      ? branches.filter((b) => b.name.toLowerCase().includes(q))
+      : [...branches]
+    list.sort((a, b) => {
+      const aDef = a.name === defaultBranchName ? 0 : 1
+      const bDef = b.name === defaultBranchName ? 0 : 1
+      if (aDef !== bDef) return aDef - bDef
+      const ta = a.tipTimestamp || 0
+      const tb = b.tipTimestamp || 0
+      if (tb !== ta) return tb - ta
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    })
+    return list
+  }, [branches, branchSearch, defaultBranchName])
+
+  const prBySourceBranch = useMemo(() => buildPrBySourceBranch(pullRequests), [pullRequests])
 
   useEffect(() => {
     loadRepoData()
@@ -294,6 +392,16 @@ export default function RepoDetailPage() {
   const formatDate = (ts) => {
     if (!ts) return '-'
     return new Date(ts).toLocaleDateString()
+  }
+
+  /** Branches tab: show time too; backend uses ms since epoch */
+  const formatBranchTipDate = (ts) => {
+    if (ts == null || ts === 0) return '—'
+    try {
+      return new Date(ts).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    } catch {
+      return '—'
+    }
   }
 
   const handleCommitClick = async (c) => {
@@ -467,25 +575,165 @@ export default function RepoDetailPage() {
 
       {activeTab === 'branches' && (
         <section className={styles.section}>
-          <p className={styles.branchHelp}>Select a branch above to view files.</p>
           {branches.length === 0 ? (
             <p className={styles.empty}>No branches</p>
           ) : (
-            <ul className={styles.list}>
-              {branches.map((b) => (
-                <li key={b.name} className={styles.branch}>
-                  <span className={styles.branchName}>{b.name}</span>
-                  {b.commitHash ? (
-                    <>
-                      <code className={styles.hash}>{b.commitHash}</code>
-                      <span className={styles.branchOk} title="Branch points to valid commit">✓</span>
-                    </>
-                  ) : (
-                    <span className={styles.branchWarn}>No commit</span>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <div className={styles.ghBranchesWrap}>
+              <div className={styles.ghBranchesToolbar}>
+                <div className={styles.ghBranchesCount}>
+                  <span className={styles.ghBranchesCountNum}>{filteredBranchesGh.length}</span>
+                  <span className={styles.ghBranchesCountLabel}>branch{filteredBranchesGh.length === 1 ? '' : 'es'}</span>
+                </div>
+                <label className={styles.ghBranchesSearchLabel}>
+                  <span className={styles.visuallyHidden}>Search branches</span>
+                  <input
+                    type="search"
+                    className={styles.ghBranchesSearch}
+                    placeholder="Search branches…"
+                    value={branchSearch}
+                    onChange={(e) => setBranchSearch(e.target.value)}
+                    autoComplete="off"
+                  />
+                </label>
+              </div>
+              <div className={styles.ghBranchesTableScroll}>
+                <table className={styles.ghBranchesTable}>
+                  <thead>
+                    <tr>
+                      <th className={styles.ghBranchesTh}>Branch</th>
+                      <th className={styles.ghBranchesTh}>Updated</th>
+                      <th className={styles.ghBranchesThPr}>Pull request</th>
+                      <th className={styles.ghBranchesTh}>Latest commit</th>
+                      <th className={styles.ghBranchesThIcon} aria-hidden="true" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredBranchesGh.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className={styles.ghBranchesEmptyRow}>
+                          No branches match your search.
+                        </td>
+                      </tr>
+                    ) : null}
+                    {filteredBranchesGh.map((b) => {
+                      const shortH =
+                        b.tipShortHash ||
+                        (b.commitHash && b.commitHash.length > 12 ? b.commitHash.slice(0, 12) : b.commitHash)
+                      const isDefault = b.name === defaultBranchName
+                      const pr = prBySourceBranch.get(b.name)
+                      const prDescShort = truncatePrDesc(pr?.description)
+                      const newPrSearch = `?source=${encodeURIComponent(b.name)}&target=${encodeURIComponent(defaultBranchName)}`
+                      const openBranch = () => {
+                        setSelectedBranch(b.name)
+                        setActiveTab('files')
+                      }
+                      return (
+                        <tr
+                          key={b.name}
+                          className={styles.ghBranchesTr}
+                          role="button"
+                          tabIndex={0}
+                          onClick={openBranch}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              openBranch()
+                            }
+                          }}
+                        >
+                          <td className={styles.ghBranchesTdBranch}>
+                            <div className={styles.ghBranchCell}>
+                              <svg className={styles.ghBranchIcon} width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                                <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 9.5 3.25zm-5 0a2.25 2.25 0 1 1 3 2.122v6.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 4.5 3.25z" />
+                              </svg>
+                              <span className={styles.ghBranchName}>{b.name}</span>
+                              {isDefault ? (
+                                <span className={styles.ghDefaultBadge}>default</span>
+                              ) : null}
+                              <button
+                                type="button"
+                                className={styles.ghCopyBranchBtn}
+                                title="Copy branch name"
+                                aria-label={`Copy ${b.name}`}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  navigator.clipboard?.writeText(b.name)
+                                }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                          <td
+                            className={styles.ghBranchesTdMuted}
+                            title={formatBranchTipDate(b.tipTimestamp)}
+                          >
+                            {formatRelativeUpdated(b.tipTimestamp)}
+                          </td>
+                          <td className={styles.ghBranchesTdPr} onClick={(e) => e.stopPropagation()}>
+                            <div className={styles.ghPrCell}>
+                              {pr ? (
+                                <Link
+                                  to={`/repos/${username}/${repoName}/pull-requests/${pr.id}`}
+                                  className={styles.ghPrLinkInline}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <span>{pr.id}</span>
+                                  {prDescShort ? (
+                                    <span className={styles.ghPrDescMuted} title={pr.description || ''}>
+                                      {prDescShort}
+                                    </span>
+                                  ) : null}
+                                  <span className={prStatusBadgeClass(styles, pr.status)}>{pr.status}</span>
+                                </Link>
+                              ) : !isDefault ? (
+                                <Link
+                                  to={`/repos/${username}/${repoName}/pull-requests/new${newPrSearch}`}
+                                  className={styles.ghCreatePrLink}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  Create pull request
+                                </Link>
+                              ) : (
+                                <span className={styles.ghPrEmpty}>—</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className={styles.ghBranchesTdCommit}>
+                            <div
+                              className={styles.ghCommitMeta}
+                              title={
+                                [b.tipMessage?.trim(), b.tipAuthor?.trim() ? `by ${b.tipAuthor.trim()}` : '']
+                                  .filter(Boolean)
+                                  .join(' · ') || undefined
+                              }
+                            >
+                              <code className={styles.ghCommitHash} title={b.commitHash || ''}>{shortH || '—'}</code>
+                              <span className={styles.ghCommitAuthor}>
+                                {b.tipAuthor?.trim() ? (
+                                  <>
+                                    Last commit by <strong className={styles.ghCommitAuthorName}>{b.tipAuthor.trim()}</strong>
+                                  </>
+                                ) : (
+                                  <span className={styles.ghCommitUnknown}>Unknown author</span>
+                                )}
+                              </span>
+                            </div>
+                          </td>
+                          <td className={styles.ghBranchesTdIcon}>
+                            <span className={styles.ghRowChevron} aria-hidden="true">→</span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className={styles.ghBranchesFootnote}>Click a row to open that branch in Files.</p>
+            </div>
           )}
         </section>
       )}
