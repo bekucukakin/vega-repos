@@ -17,7 +17,8 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
 
-# Vega User Service - for login validation
+# Vega User Service — login/profile proxy; JWT must match user-service jwt.secret.
+# Dev users are seeded in user-service (com.vega.userservice.config.SeedUsers + DataInitializer).
 vega:
   user-service:
     url: ${VEGA_USER_SERVICE_URL:http://localhost:8085}

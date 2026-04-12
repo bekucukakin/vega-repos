@@ -727,10 +727,11 @@ export default function RepoDetailPage() {
                 {collaboratorError && <p className={styles.collabAlert} role="alert">{collaboratorError}</p>}
                 {inviteSent && <p className={styles.collabSuccess} role="status">Invite sent successfully.</p>}
                 <form onSubmit={handleSendInvite} className={styles.collabForm}>
+                  {/* Sample username aligns with vega_user_service SeedUsers.java (e.g. developer1) */}
                   <input
                     type="text"
                     className={styles.settingInput}
-                    placeholder="Username (e.g. versionengineai)"
+                    placeholder="Username (e.g. developer1)"
                     value={newCollaborator}
                     onChange={(e) => setNewCollaborator(e.target.value)}
                   />
