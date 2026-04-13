@@ -872,7 +872,7 @@ export default function RepoDetailPage() {
                     onKeyDown={(e) => e.key === 'Enter' && handleCommitClick(c)}
                     role="button"
                     tabIndex={0}
-                    style={{ height: ROW_H }}
+                    style={{ minHeight: ROW_H }}
                   >
                     <svg className={styles.graphSvg} width={graphW} height={ROW_H} style={{ minWidth: graphW }}>
                       {passLines}
@@ -889,7 +889,9 @@ export default function RepoDetailPage() {
                     </svg>
                     <div className={styles.graphInfo}>
                       <div className={styles.graphMsgRow}>
-                        <span className={styles.message}>{c.message || '(no message)'}</span>
+                        <span className={styles.message} title={c.message || undefined}>
+                          {c.message || '(no message)'}
+                        </span>
                         {c.aiGenerated && <span className={styles.vegaBadge} title="VEGA AI generated">VEGA</span>}
                         {c.isMerge && <span className={styles.mergeBadge}>Merge PR</span>}
                         {c.branches && c.branches.map((b) => (
@@ -913,7 +915,10 @@ export default function RepoDetailPage() {
             <div className={styles.diffModal} onClick={() => setSelectedCommit(null)}>
               <div className={styles.diffModalContent} onClick={(e) => e.stopPropagation()}>
                 <div className={styles.diffModalHeader}>
-                  <h3>Commit {selectedCommit.hash} — {selectedCommit.message || '(no message)'}</h3>
+                  <div className={styles.diffModalTitleBlock}>
+                    <h3 className={styles.diffModalHashLine}>Commit {selectedCommit.hash}</h3>
+                    <p className={styles.diffModalMessageLine}>{selectedCommit.message || '(no message)'}</p>
+                  </div>
                   <button type="button" className={styles.diffModalClose} onClick={() => setSelectedCommit(null)}>×</button>
                 </div>
                 {diffLoading ? (
