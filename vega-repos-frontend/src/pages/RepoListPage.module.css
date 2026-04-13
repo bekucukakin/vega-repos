@@ -191,9 +191,9 @@
 }
 
 .tabActive {
-  color: var(--text-primary) !important;
-  background: var(--bg-hover) !important;
-  border-color: var(--border-default) !important;
+  color: var(--accent) !important;
+  background: var(--accent-muted) !important;
+  border-color: rgba(88,166,255,0.25) !important;
 }
 
 .tabCount {
@@ -228,11 +228,15 @@
 .repoRow {
   padding: var(--space-5) var(--space-6);
   border-bottom: 1px solid var(--border-subtle);
-  transition: background var(--transition-fast);
+  border-left: 2px solid transparent;
+  transition: background var(--transition-fast), border-color var(--transition-base);
 }
 
 .repoRow:last-child { border-bottom: none; }
-.repoRow:hover { background: var(--bg-hover); }
+.repoRow:hover {
+  background: var(--bg-hover);
+  border-left-color: var(--accent);
+}
 
 .repoMain { display: flex; flex-direction: column; gap: 6px; }
 
@@ -291,9 +295,9 @@
 }
 
 .badgePublic {
-  color: var(--success);
-  background: rgba(63,185,80,0.12);
-  border: 1px solid rgba(63,185,80,0.25);
+  color: #818cf8;
+  background: rgba(129,140,248,0.12);
+  border: 1px solid rgba(129,140,248,0.25);
 }
 
 .badgePrivate {

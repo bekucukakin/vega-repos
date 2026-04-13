@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { fetchWithTimeout } from '../utils/fetchWithTimeout'
 import { parseApiError } from '../utils/parseApiError'
+import VegaBrandMark from '../components/VegaBrandMark'
 import styles from './RegisterPage.module.css'
 
 const API_BASE = '/api'
@@ -103,12 +104,10 @@ export default function RegisterPage() {
         <div className={styles.brand}>
           <Link to="/" className={styles.brandLink}>
             <div className={styles.logoIcon}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" />
-              </svg>
+              <VegaBrandMark gradientId="registerHexGrad" />
             </div>
             <span className={styles.logo}>VEGA</span>
-            <span className={styles.brandSub}>VersionEngine AI</span>
+            <span className={styles.brandSub}>Version Engine AI</span>
           </Link>
         </div>
         <div className={styles.card}>

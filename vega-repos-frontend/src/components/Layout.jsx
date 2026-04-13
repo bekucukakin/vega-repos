@@ -179,11 +179,12 @@ export default function Layout() {
               <div className={styles.dropdownWrap} ref={metricsMenuRef}>
                 <button
                   type="button"
-                  className={`${styles.navLink} ${isMetricsActive ? styles.navLinkActive : ''}`}
+                  className={`${styles.navLink} ${styles.navLinkMetrics} ${isMetricsActive ? styles.navLinkActive : ''}`}
                   onClick={() => setMetricsMenuOpen((v) => !v)}
                 >
-                  <span className={styles.navIcon}>{NAV_ICONS['/metrics']}</span>
+                  <span className={`${styles.navIcon} ${styles.navIconMetrics}`}>{NAV_ICONS['/metrics']}</span>
                   Metrics
+                  <span className={styles.metricsBadge} />
                   <svg className={`${styles.chevron} ${metricsMenuOpen ? styles.chevronUp : ''}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="6 9 12 15 18 9" />
                   </svg>

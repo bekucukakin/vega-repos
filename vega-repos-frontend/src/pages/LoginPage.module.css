@@ -32,15 +32,18 @@
 }
 
 .logoIcon {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-xl);
-  background: linear-gradient(135deg, var(--accent), #6366f1);
-  color: #fff;
-  box-shadow: 0 0 30px rgba(88,166,255,0.2);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(22, 27, 34, 0.95), rgba(13, 17, 23, 0.98));
+  border: 1px solid rgba(88, 166, 255, 0.18);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 8px 28px rgba(0, 0, 0, 0.35),
+    0 0 24px rgba(88, 166, 255, 0.12);
 }
 
 .logo {
@@ -51,11 +54,12 @@
 }
 
 .brandSub {
-  font-size: 0.62rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-tertiary);
+  white-space: nowrap;
 }
 
 .brandLink:hover .logo { color: var(--accent); }
@@ -64,9 +68,21 @@
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border-default);
+  border-top: 2px solid transparent;
   border-radius: var(--radius-xl);
   padding: var(--space-8) var(--space-8);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg), 0 0 40px rgba(88,166,255,0.06);
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #818cf8, var(--accent), var(--orange));
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 }
 
 .card h1 {
@@ -127,7 +143,7 @@
 }
 
 .submit {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), #818cf8);
   color: #fff;
   border: none;
   padding: 10px var(--space-4);
@@ -137,12 +153,13 @@
   margin-top: var(--space-2);
   cursor: pointer;
   transition: all var(--transition-base);
-  box-shadow: 0 0 16px rgba(88,166,255,0.15);
+  box-shadow: 0 0 20px rgba(88,166,255,0.2);
 }
 
 .submit:hover:not(:disabled) {
-  background: var(--accent-hover);
-  box-shadow: 0 0 24px rgba(88,166,255,0.3);
+  filter: brightness(1.12);
+  box-shadow: 0 0 32px rgba(88,166,255,0.35), 0 0 16px rgba(129,140,248,0.2);
+  transform: translateY(-1px);
 }
 
 .submit:disabled {

@@ -21,6 +21,12 @@
   --accent-hover: #79b8ff;
   --accent-muted: rgba(88, 166, 255, 0.1);
 
+  /* ── Orange ── */
+  --orange: #f97316;
+  --orange-hover: #fb923c;
+  --orange-muted: rgba(249, 115, 22, 0.12);
+  --orange-glow: rgba(249, 115, 22, 0.2);
+
   /* ── Semantic ── */
   --success: #3fb950;
   --warning: #d29922;

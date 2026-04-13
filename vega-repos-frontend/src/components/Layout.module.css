@@ -109,6 +109,7 @@
   background: var(--bg-hover);
   text-decoration: none;
   outline: none;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.06);
 }
 
 .navLinkActive {
@@ -118,6 +119,39 @@
 
 .navLinkActive .navIcon {
   color: var(--accent);
+}
+
+/* ── Metrics special link ── */
+.navLinkMetrics:hover {
+  color: var(--orange) !important;
+  background: var(--orange-muted) !important;
+  box-shadow: 0 0 12px var(--orange-glow) !important;
+}
+
+.navLinkMetrics.navLinkActive {
+  color: var(--orange) !important;
+  background: var(--orange-muted) !important;
+}
+
+.navLinkMetrics.navLinkActive .navIconMetrics,
+.navLinkMetrics:hover .navIconMetrics {
+  color: var(--orange) !important;
+}
+
+.metricsBadge {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 6px var(--orange);
+  animation: badgePulse 2.2s ease-in-out infinite;
+  flex-shrink: 0;
+  margin-left: 1px;
+}
+
+@keyframes badgePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.55; transform: scale(0.75); }
 }
 
 .navIcon {
