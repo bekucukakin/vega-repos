@@ -222,6 +222,13 @@
   align-self: center;
 }
 
+.approveBlockedNote {
+  font-size: 0.85rem;
+  color: var(--error);
+  align-self: center;
+  font-weight: 500;
+}
+
 /* ── AI trigger ── */
 .aiTrigger {
   display: flex;

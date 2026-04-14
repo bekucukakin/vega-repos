@@ -301,13 +301,24 @@ export default function PullRequestDetailPage() {
                 )}
                 {canApprovePr && (pr.status === 'OPEN' || pr.status === 'REVIEWING') && (
                   <>
-                    <button type="button" onClick={() => doAction('approve')} disabled={actionLoading} className={styles.actionBtnApprove}>
+                    <button
+                      type="button"
+                      onClick={() => doAction('approve')}
+                      disabled={actionLoading || !!pr.hasConflicts}
+                      className={styles.actionBtnApprove}
+                      title={pr.hasConflicts ? 'Cannot approve: merge conflicts must be resolved first' : undefined}
+                    >
                       Approve
                     </button>
                     <button type="button" onClick={() => doAction('reject')} disabled={actionLoading} className={styles.actionBtnReject}>
                       Reject
                     </button>
                   </>
+                )}
+                {canApprovePr && (pr.status === 'OPEN' || pr.status === 'REVIEWING') && pr.hasConflicts && (
+                  <span className={styles.approveBlockedNote}>
+                    Approval blocked — resolve merge conflicts first
+                  </span>
                 )}
                 {canMergePr && pr.status === 'APPROVED' && !pr.hasConflicts && (
                   <button type="button" onClick={() => doAction('merge')} disabled={actionLoading} className={styles.actionBtnMerge}>
