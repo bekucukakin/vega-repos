@@ -13,15 +13,16 @@ export default function CollaboratorRequestsPage() {
   const [error, setError] = useState('')
 
   const load = () => {
+    setError('')
     Promise.all([
       fetch(`${API_BASE}/collaborator-requests`, { headers: getAuthHeader() }),
       fetch(`${API_BASE}/collaborator-invites`, { headers: getAuthHeader() }),
     ])
-      .then(([r1, r2]) => Promise.all([
-        r1.ok ? r1.json() : [],
-        r2.ok ? r2.json() : [],
-      ]))
-      .then(([reqs, invs]) => {
+      .then(async ([r1, r2]) => {
+        if (r1.status === 401 || r2.status === 401) throw new Error('Unauthorized — please log in again.')
+        if (r1.status === 403 || r2.status === 403) throw new Error('Forbidden — you do not have permission.')
+        const reqs = r1.ok ? await r1.json() : []
+        const invs = r2.ok ? await r2.json() : []
         setRequests(Array.isArray(reqs) ? reqs : [])
         setInvites(Array.isArray(invs) ? invs : [])
       })
@@ -34,41 +35,34 @@ export default function CollaboratorRequestsPage() {
     load()
   }, [user?.username, getAuthHeader])
 
-  const handleApprove = (req) => {
-    fetch(`${API_BASE}/repos/${req.ownerUsername}/${req.repoName}/collaborators/requests/${req.id}/approve`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-    })
-      .then((r) => r.ok ? load() : Promise.reject())
-      .catch(() => setError('Failed to approve'))
-  }
+  const handleRequest = (url, method, errorMsg) =>
+    fetch(url, { method, headers: getAuthHeader() })
+      .then((r) => {
+        if (r.ok) return load()
+        if (r.status === 401) return setError('Unauthorized — please log in again.')
+        if (r.status === 403) return setError('Forbidden — you do not have permission for this action.')
+        if (r.status === 404) return setError('Not found — the request may have already been processed.')
+        return setError(`${errorMsg} (${r.status})`)
+      })
+      .catch((e) => setError(e.message || errorMsg))
 
-  const handleReject = (req) => {
-    fetch(`${API_BASE}/repos/${req.ownerUsername}/${req.repoName}/collaborators/requests/${req.id}/reject`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-    })
-      .then((r) => r.ok ? load() : Promise.reject())
-      .catch(() => setError('Failed to reject'))
-  }
+  const handleApprove = (req) =>
+    handleRequest(
+      `${API_BASE}/repos/${req.ownerUsername}/${req.repoName}/collaborators/requests/${req.id}/approve`,
+      'POST', 'Failed to approve request'
+    )
 
-  const handleAcceptInvite = (inv) => {
-    fetch(`${API_BASE}/collaborator-invites/${inv.id}/accept`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-    })
-      .then((r) => r.ok ? load() : Promise.reject())
-      .catch(() => setError('Failed to accept invite'))
-  }
+  const handleReject = (req) =>
+    handleRequest(
+      `${API_BASE}/repos/${req.ownerUsername}/${req.repoName}/collaborators/requests/${req.id}/reject`,
+      'POST', 'Failed to reject request'
+    )
 
-  const handleRejectInvite = (inv) => {
-    fetch(`${API_BASE}/collaborator-invites/${inv.id}/reject`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-    })
-      .then((r) => r.ok ? load() : Promise.reject())
-      .catch(() => setError('Failed to reject invite'))
-  }
+  const handleAcceptInvite = (inv) =>
+    handleRequest(`${API_BASE}/collaborator-invites/${inv.id}/accept`, 'POST', 'Failed to accept invite')
+
+  const handleRejectInvite = (inv) =>
+    handleRequest(`${API_BASE}/collaborator-invites/${inv.id}/reject`, 'POST', 'Failed to decline invite')
 
   if (loading) return <div className={styles.loading}>Loading...</div>
 
@@ -98,6 +92,9 @@ export default function CollaboratorRequestsPage() {
                     <Link to={`/repos/${r.ownerUsername}/${r.repoName}`} className={styles.repoLink}>
                       {r.ownerUsername}/{r.repoName}
                     </Link>
+                    {r.role && (
+                      <span className={styles.roleBadge}>{r.role}</span>
+                    )}
                   </span>
                   {r.createdAt && (
                     <span className={styles.itemDate}>{new Date(r.createdAt).toLocaleDateString()}</span>
