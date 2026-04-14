@@ -76,7 +76,7 @@ export default function PrMetricsPage() {
       <div className={styles.scopeBlock}>
         <h3>My Pull Requests ({user?.username})</h3>
         <div className={styles.statsRow}>
-          <StatCard value={num(mp.totalPrs)} label="Total PRs" accent="Blue" />
+          <StatCard value={num(mp.totalPrs)} label="My PRs" accent="Blue" />
           <StatCard value={num(mp.openCount)} label="Open" accent="Yellow" />
           <StatCard value={num(mp.reviewingCount)} label="Reviewing" accent="Purple" />
           <StatCard value={num(mp.approvedCount)} label="Approved" accent="Green" />
@@ -101,6 +101,13 @@ export default function PrMetricsPage() {
             />
           )}
         </div>
+        {(num(mp.reviewerApprovedCount) > 0 || num(mp.reviewerRejectedCount) > 0) && (
+          <div className={styles.metricBlock}>
+            <h4>My Review Activity (as Reviewer)</h4>
+            <MetricRow label="PRs I Approved" value={num(mp.reviewerApprovedCount)} description="Pull requests you approved as a reviewer" />
+            <MetricRow label="PRs I Rejected" value={num(mp.reviewerRejectedCount)} description="Pull requests you rejected as a reviewer" />
+          </div>
+        )}
         {(num(mp.prsWithFeatureCount) > 0 || num(mp.prsWithoutFeatureCount) > 0) && (
           <div className={styles.metricBlock}>
             <h4>Review Time Analysis</h4>

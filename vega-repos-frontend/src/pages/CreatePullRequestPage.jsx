@@ -70,7 +70,7 @@ export default function CreatePullRequestPage() {
       .then((r) => r.ok ? safeJson(r) : [])
       .then((data) => {
         const list = Array.isArray(data) ? data : []
-        setReviewers(list.filter(c => c.role === 'reviewer'))
+        setReviewers(list.filter(c => c.role === 'reviewer' || c.role === 'maintainer'))
       })
       .catch(() => setReviewers([]))
   }, [username, repoName, headers, prQuerySource, prQueryTarget])
