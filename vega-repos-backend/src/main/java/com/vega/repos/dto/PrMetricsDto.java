@@ -18,6 +18,10 @@ public class PrMetricsDto {
     private long mergedCount;
     private long withRiskAnalysisCount;
     private long totalPrsAnalyzed;
+    /** How many PRs this user approved (reviewer perspective, from DB) */
+    private long reviewerApprovedCount;
+    /** How many PRs this user rejected (reviewer perspective, from DB) */
+    private long reviewerRejectedCount;
     private long prsWithFeatureCount;
     private long prsWithoutFeatureCount;
     private long totalReviewTimeWithFeatureMs;

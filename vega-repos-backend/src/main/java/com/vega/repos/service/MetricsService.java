@@ -15,6 +15,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Computes per-user and global VEGA metrics.
@@ -25,9 +27,15 @@ public class MetricsService {
 
     private static final Logger log = LoggerFactory.getLogger(MetricsService.class);
 
+    private static final long GLOBAL_CACHE_TTL_MS = 5 * 60 * 1000L; // 5 minutes
+
     private final UserCommitMetricsRepository commitMetricsRepo;
     private final UserPrMetricsRepository prMetricsRepo;
     private final RepoService repoService;
+
+    /** Simple in-memory cache for global metrics to avoid O(N×M) scans on every request. */
+    private final AtomicReference<VegaMetricsDto> globalCache = new AtomicReference<>(null);
+    private final AtomicLong globalCacheTimestamp = new AtomicLong(0L);
 
     public MetricsService(UserCommitMetricsRepository commitMetricsRepo,
                           UserPrMetricsRepository prMetricsRepo,
@@ -49,8 +57,14 @@ public class MetricsService {
                 .build();
     }
 
-    /** Get global VEGA metrics (aggregated across all users from DB + HDFS). */
+    /** Get global VEGA metrics (aggregated across all users from DB + HDFS). Cached for 5 minutes. */
     public VegaMetricsDto getGlobalMetrics() {
+        long now = System.currentTimeMillis();
+        VegaMetricsDto cached = globalCache.get();
+        if (cached != null && (now - globalCacheTimestamp.get()) < GLOBAL_CACHE_TTL_MS) {
+            return cached;
+        }
+
         List<String> allUsers = repoService.listAllUsernames();
         long totalCommits = 0, aiCount = 0;
         long totalPrs = 0, openC = 0, reviewingC = 0, approvedC = 0, rejectedC = 0, mergedC = 0, riskC = 0;
@@ -64,6 +78,7 @@ public class MetricsService {
                     aiCount += commits.stream().filter(c -> Boolean.TRUE.equals(c.getAiGenerated())).count();
 
                     List<PrDto> prs = repoService.getPullRequests(user, repo.getName());
+                    // Count each PR once (owned by repo owner, represents global state)
                     totalPrs += prs.size();
                     for (PrDto pr : prs) {
                         switch (pr.getStatus() != null ? pr.getStatus() : "") {
@@ -90,21 +105,26 @@ public class MetricsService {
         commitDto.setManualCount(manualCount);
         commitDto.setAiAdoptionRatePercent(aiRate);
 
+        // DB-sourced reviewer counts are separate from HDFS status counts (avoid double-counting)
         PrMetricsDto prDto = aggregateDbPrMetrics();
         prDto.setTotalPrs(totalPrs);
         prDto.setOpenCount(openC);
         prDto.setReviewingCount(reviewingC);
-        prDto.setApprovedCount(prDto.getApprovedCount() + approvedC);
-        prDto.setRejectedCount(prDto.getRejectedCount() + rejectedC);
+        prDto.setApprovedCount(approvedC);   // HDFS status counts only
+        prDto.setRejectedCount(rejectedC);    // HDFS status counts only
         prDto.setMergedCount(mergedC);
         prDto.setWithRiskAnalysisCount(riskC);
 
-        return VegaMetricsDto.builder()
+        VegaMetricsDto result = VegaMetricsDto.builder()
                 .scope("global")
                 .username(null)
                 .commitMetrics(commitDto)
                 .prMetrics(prDto)
                 .build();
+
+        globalCache.set(result);
+        globalCacheTimestamp.set(now);
+        return result;
     }
 
     /** Compute commit metrics for a user from HDFS repos + DB. */
@@ -137,7 +157,8 @@ public class MetricsService {
         return dto;
     }
 
-    /** Compute PR metrics for a user from HDFS repos + DB. */
+    /** Compute PR metrics for a user from HDFS repos + DB.
+     *  HDFS counts only PRs authored by the user; DB stores reviewer-perspective counters separately. */
     private PrMetricsDto computePrMetrics(String username) {
         long totalPrs = 0, openC = 0, reviewingC = 0, approvedC = 0, rejectedC = 0, mergedC = 0, riskC = 0;
 
@@ -145,8 +166,10 @@ public class MetricsService {
             List<RepoDto> repos = repoService.listRepositories(username);
             for (RepoDto repo : repos) {
                 List<PrDto> prs = repoService.getPullRequests(username, repo.getName());
-                totalPrs += prs.size();
                 for (PrDto pr : prs) {
+                    // Only count PRs that this user authored (filter collaborator repos)
+                    if (!username.equalsIgnoreCase(pr.getAuthor())) continue;
+                    totalPrs++;
                     switch (pr.getStatus() != null ? pr.getStatus() : "") {
                         case "OPEN" -> openC++;
                         case "REVIEWING" -> reviewingC++;
@@ -165,13 +188,15 @@ public class MetricsService {
                 .map(this::toPrDto)
                 .orElse(emptyPrMetrics());
 
+        // HDFS status counts represent the author's PRs — store separately from reviewer DB counts
         dto.setTotalPrs(totalPrs);
         dto.setOpenCount(openC);
         dto.setReviewingCount(reviewingC);
-        dto.setApprovedCount(dto.getApprovedCount() + approvedC);
-        dto.setRejectedCount(dto.getRejectedCount() + rejectedC);
+        dto.setApprovedCount(approvedC);    // HDFS author-perspective: PRs authored by user that are approved
+        dto.setRejectedCount(rejectedC);    // HDFS author-perspective: PRs authored by user that are rejected
         dto.setMergedCount(mergedC);
         dto.setWithRiskAnalysisCount(riskC);
+        // reviewerApprovedCount and reviewerRejectedCount are already set by toPrDto (from DB)
         return dto;
     }
 
@@ -216,8 +241,9 @@ public class MetricsService {
                 .totalPrsAnalyzed(total)
                 .prsWithFeatureCount(withF)
                 .prsWithoutFeatureCount(withoutF)
-                .approvedCount(e.getApprovedCount() != null ? e.getApprovedCount() : 0)
-                .rejectedCount(e.getRejectedCount() != null ? e.getRejectedCount() : 0)
+                // DB stores reviewer-perspective counts (PRs I reviewed as reviewer)
+                .reviewerApprovedCount(e.getApprovedCount() != null ? e.getApprovedCount() : 0)
+                .reviewerRejectedCount(e.getRejectedCount() != null ? e.getRejectedCount() : 0)
                 .totalReviewTimeWithFeatureMs(timeWith)
                 .totalReviewTimeWithoutFeatureMs(timeWithout)
                 .avgReviewTimeWithFeatureMs(avgWith)
@@ -268,7 +294,7 @@ public class MetricsService {
         double improve = avgWithout > 0 ? ((double) (avgWithout - avgWith) / avgWithout) * 100 : 0;
         return PrMetricsDto.builder()
                 .totalPrsAnalyzed(total).prsWithFeatureCount(withF).prsWithoutFeatureCount(withoutF)
-                .approvedCount(approved).rejectedCount(rejected)
+                .reviewerApprovedCount(approved).reviewerRejectedCount(rejected)
                 .totalReviewTimeWithFeatureMs(timeWith).totalReviewTimeWithoutFeatureMs(timeWithout)
                 .avgReviewTimeWithFeatureMs(avgWith).avgReviewTimeWithoutFeatureMs(avgWithout)
                 .reviewTimeImprovementPercent(improve)
@@ -289,6 +315,7 @@ public class MetricsService {
                 .totalPrs(0).openCount(0).reviewingCount(0).approvedCount(0).rejectedCount(0).mergedCount(0)
                 .withRiskAnalysisCount(0)
                 .totalPrsAnalyzed(0).prsWithFeatureCount(0).prsWithoutFeatureCount(0)
+                .reviewerApprovedCount(0).reviewerRejectedCount(0)
                 .totalReviewTimeWithFeatureMs(0).totalReviewTimeWithoutFeatureMs(0)
                 .avgReviewTimeWithFeatureMs(0).avgReviewTimeWithoutFeatureMs(0)
                 .reviewTimeImprovementPercent(0)
@@ -312,10 +339,11 @@ public class MetricsService {
             m.setTotalReviewTimeWithoutFeatureMs((m.getTotalReviewTimeWithoutFeatureMs() != null ? m.getTotalReviewTimeWithoutFeatureMs() : 0) + reviewTimeMs);
         }
         prMetricsRepo.save(m);
+        globalCacheTimestamp.set(0L); // invalidate global cache
     }
 
-    /** Record PR rejection. */
-    public void recordPrRejected(String reviewerUsername) {
+    /** Record PR rejection (call when reviewer rejects a PR). */
+    public void recordPrRejected(String reviewerUsername, long reviewTimeMs, boolean hadPrSummaryFeature) {
         UserPrMetrics m = prMetricsRepo.findByUsernameIgnoreCase(reviewerUsername)
                 .orElseGet(() -> {
                     var newM = UserPrMetrics.builder().username(reviewerUsername).build();
@@ -323,7 +351,15 @@ public class MetricsService {
                 });
         m.setTotalPrsAnalyzed((m.getTotalPrsAnalyzed() != null ? m.getTotalPrsAnalyzed() : 0) + 1);
         m.setRejectedCount((m.getRejectedCount() != null ? m.getRejectedCount() : 0) + 1);
+        if (hadPrSummaryFeature) {
+            m.setPrsWithFeatureCount((m.getPrsWithFeatureCount() != null ? m.getPrsWithFeatureCount() : 0) + 1);
+            m.setTotalReviewTimeWithFeatureMs((m.getTotalReviewTimeWithFeatureMs() != null ? m.getTotalReviewTimeWithFeatureMs() : 0) + reviewTimeMs);
+        } else {
+            m.setPrsWithoutFeatureCount((m.getPrsWithoutFeatureCount() != null ? m.getPrsWithoutFeatureCount() : 0) + 1);
+            m.setTotalReviewTimeWithoutFeatureMs((m.getTotalReviewTimeWithoutFeatureMs() != null ? m.getTotalReviewTimeWithoutFeatureMs() : 0) + reviewTimeMs);
+        }
         prMetricsRepo.save(m);
+        globalCacheTimestamp.set(0L); // invalidate global cache
     }
 
     /** Record or update commit metrics (for sync from CLI). */
