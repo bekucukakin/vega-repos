@@ -221,6 +221,8 @@ export default function RepoDetailPage() {
   const [selectedCommit, setSelectedCommit] = useState(null)
   const [commitDiff, setCommitDiff] = useState(null)
   const [diffLoading, setDiffLoading] = useState(false)
+  const [userRole, setUserRole] = useState('public')
+  const [inviteRole, setInviteRole] = useState('developer')
 
   const loadRepoData = useCallback(async () => {
     setAccessDenied(false)
@@ -253,6 +255,14 @@ export default function RepoDetailPage() {
       setSelectedBranch((prev) =>
         hasMaster ? 'master' : (branchesList[0]?.name || prev)
       )
+      // Fetch current user's role in this repo
+      try {
+        const roleRes = await fetch(`${API_BASE}/repos/${username}/${repoName}/can-pr`, { headers })
+        if (roleRes.ok) {
+          const roleData = await roleRes.json()
+          setUserRole(roleData?.role || 'public')
+        }
+      } catch { /* role stays 'public' */ }
     } catch (err) {
       console.error('loadRepoData error:', err)
       setError('Failed to load repository')
@@ -292,8 +302,11 @@ export default function RepoDetailPage() {
     loadRepoData()
   }, [loadRepoData])
 
+  // Owner or maintainer can manage collaborators and settings
+  const canManage = isOwner || userRole === 'maintainer'
+
   useEffect(() => {
-    if (!isOwner || !username || !repoName) return
+    if (!canManage || !username || !repoName) return
     fetch(`${API_BASE}/repos/${username}/${repoName}/collaborators`, { headers })
       .then((r) => r.ok ? r.json() : [])
       .then(setCollaborators)
@@ -306,7 +319,7 @@ export default function RepoDetailPage() {
       .then((r) => r.ok ? r.json() : [])
       .then(setPendingInvites)
       .catch(() => setPendingInvites([]))
-  }, [isOwner, username, repoName, headers])
+  }, [canManage, username, repoName, headers])
 
   useEffect(() => {
     if (!username || !repoName) return
@@ -326,7 +339,7 @@ export default function RepoDetailPage() {
     fetch(`${API_BASE}/repos/${username}/${repoName}/collaborators/invite`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: toAdd }),
+      body: JSON.stringify({ username: toAdd, role: inviteRole }),
     })
       .then((r) => {
         if (r.ok) {
@@ -513,7 +526,7 @@ export default function RepoDetailPage() {
         >
           Pull Requests
         </button>
-        {isOwner && (
+        {canManage && (
           <button
             type="button"
             className={`${styles.tab} ${activeTab === 'collaborators' ? styles.tabActive : ''}`}
@@ -522,7 +535,7 @@ export default function RepoDetailPage() {
             Collaborators
           </button>
         )}
-        {isOwner && (
+        {canManage && (
           <button
             type="button"
             className={`${styles.tab} ${activeTab === 'settings' ? styles.tabActive : ''}`}
@@ -965,7 +978,7 @@ export default function RepoDetailPage() {
         </section>
       )}
 
-      {activeTab === 'collaborators' && isOwner && (
+      {activeTab === 'collaborators' && canManage && (
         <section className={styles.section}>
           <h3>Collaborators</h3>
 
@@ -975,12 +988,11 @@ export default function RepoDetailPage() {
               <div style={{flex:1}}>
                 <strong>Invite a collaborator</strong>
                 <p className={styles.settingHint}>
-                  Send an invite by username. The user will see it in Collaborator Requests and can accept to become a collaborator.
+                  Send an invite by username. The user will see it in Collaborator Requests and can accept to join.
                 </p>
                 {collaboratorError && <p className={styles.collabAlert} role="alert">{collaboratorError}</p>}
                 {inviteSent && <p className={styles.collabSuccess} role="status">Invite sent successfully.</p>}
                 <form onSubmit={handleSendInvite} className={styles.collabForm}>
-                  {/* Sample username aligns with vega_user_service SeedUsers.java (e.g. developer1) */}
                   <input
                     type="text"
                     className={styles.settingInput}
@@ -988,6 +1000,17 @@ export default function RepoDetailPage() {
                     value={newCollaborator}
                     onChange={(e) => setNewCollaborator(e.target.value)}
                   />
+                  <select
+                    className={styles.settingInput}
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value)}
+                    style={{width: 'auto', marginLeft: 8}}
+                  >
+                    <option value="reader">Reader</option>
+                    <option value="developer">Developer</option>
+                    <option value="reviewer">Reviewer</option>
+                    {isOwner && <option value="maintainer">Maintainer</option>}
+                  </select>
                   <button type="submit" disabled={addCollaboratorLoading} className={styles.btnSuccess}>
                     {addCollaboratorLoading ? 'Sending...' : 'Send invite'}
                   </button>
@@ -1044,14 +1067,24 @@ export default function RepoDetailPage() {
                   <div key={c.id} className={styles.collabItem}>
                     <span className={styles.collabName}>{c.username}</span>
                     <span className={styles.collabBadgePr} style={{
-                      background: c.role === 'reviewer' ? '#6366f1' : '#22c55e',
+                      background: {
+                        maintainer: '#f59e0b',
+                        reviewer:   '#6366f1',
+                        developer:  '#22c55e',
+                        reader:     '#6b7280',
+                      }[c.role] ?? '#22c55e',
                       color: '#fff',
                       borderRadius: 4,
                       padding: '2px 8px',
                       fontSize: 12,
                       fontWeight: 600,
                     }}>
-                      {c.role === 'reviewer' ? 'Reviewer' : 'Developer'}
+                      {{
+                        maintainer: 'Maintainer',
+                        reviewer:   'Reviewer',
+                        developer:  'Developer',
+                        reader:     'Reader',
+                      }[c.role] ?? 'Developer'}
                     </span>
                   </div>
                 ))}
@@ -1061,7 +1094,7 @@ export default function RepoDetailPage() {
         </section>
       )}
 
-      {activeTab === 'settings' && isOwner && (
+      {activeTab === 'settings' && canManage && (
         <section className={styles.section}>
           <h3>Repository Settings</h3>
           <div className={styles.settingsBlock}>
