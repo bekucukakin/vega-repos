@@ -42,6 +42,15 @@ public class CollaboratorRequest {
     @Column(name = "invited_by_username", length = 100)
     private String invitedByUsername;
 
+    /**
+     * Intended role for this request/invite: "reader", "developer", or "reviewer".
+     * For invites: set by owner at invite time, applied when invitee accepts.
+     * For access requests: set by owner at approve time. Null = defaults to "reader".
+     */
+    @Column(name = "requested_role", length = 50)
+    @Builder.Default
+    private String role = "reader";
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

@@ -20,5 +20,7 @@ public class CollaboratorRequestDto {
     private String invitedByUsername;
     private String status;
     private String message;
+    /** Intended role: "reader", "developer", or "reviewer". Defaults to "reader". */
+    private String role;
     private Instant createdAt;
 }

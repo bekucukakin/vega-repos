@@ -53,9 +53,10 @@ public class CollaboratorService {
         return toDto(req);
     }
 
-    /** Owner invites a user. Invitee must approve. */
+    /** Owner invites a user with a specific role. Invitee must approve. */
     @Transactional
-    public CollaboratorRequestDto inviteCollaborator(String ownerUsername, String repoName, String inviteeUsername) {
+    public CollaboratorRequestDto inviteCollaborator(String ownerUsername, String repoName,
+                                                     String inviteeUsername, String role) {
         if (ownerUsername.equals(inviteeUsername)) {
             throw new IllegalArgumentException("Cannot invite yourself");
         }
@@ -74,12 +75,13 @@ public class CollaboratorService {
                 .repoName(repoName)
                 .status(Status.PENDING)
                 .invitedByUsername(ownerUsername)
+                .role(resolveRole(role))
                 .build();
         req = requestRepository.save(req);
         return toDto(req);
     }
 
-    /** Invitee accepts the invite. */
+    /** Invitee accepts the invite. The role is whatever the owner specified at invite time. */
     @Transactional
     public void acceptInvite(Long requestId, String currentUsername) {
         var req = requestRepository.findById(requestId)
@@ -97,11 +99,13 @@ public class CollaboratorService {
         req.setRespondedAt(Instant.now());
         requestRepository.save(req);
 
+        String role = resolveRole(req.getRole());
         var col = RepoCollaborator.builder()
                 .ownerUsername(req.getOwnerUsername())
                 .repoName(req.getRepoName())
                 .collaboratorUsername(req.getRequesterUsername())
-                .canCreatePr(true)
+                .canCreatePr("developer".equals(role) || "maintainer".equals(role))
+                .role(role)
                 .build();
         collaboratorRepository.save(col);
     }
@@ -125,8 +129,12 @@ public class CollaboratorService {
         requestRepository.save(req);
     }
 
+    /**
+     * Owner approves an access request. The granted role defaults to "reader" (safe minimum)
+     * unless the owner explicitly specifies a different role.
+     */
     @Transactional
-    public void approveRequest(Long requestId, String ownerUsername) {
+    public void approveRequest(Long requestId, String ownerUsername, String role) {
         var req = requestRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Request not found"));
         if (!req.getOwnerUsername().equals(ownerUsername)) {
@@ -135,6 +143,7 @@ public class CollaboratorService {
         if (req.getStatus() != Status.PENDING) {
             throw new IllegalArgumentException("Request already processed");
         }
+        String grantedRole = resolveRole(role != null ? role : req.getRole());
         req.setStatus(Status.APPROVED);
         req.setRespondedAt(Instant.now());
         requestRepository.save(req);
@@ -143,7 +152,8 @@ public class CollaboratorService {
                 .ownerUsername(req.getOwnerUsername())
                 .repoName(req.getRepoName())
                 .collaboratorUsername(req.getRequesterUsername())
-                .canCreatePr(true)
+                .canCreatePr("developer".equals(grantedRole) || "maintainer".equals(grantedRole))
+                .role(grantedRole)
                 .build();
         collaboratorRepository.save(col);
     }
@@ -214,12 +224,15 @@ public class CollaboratorService {
                 ownerUsername, repoName, collaboratorUsername)) {
             throw new IllegalArgumentException("Already a collaborator");
         }
-        String resolvedRole = (role != null && (role.equals("developer") || role.equals("reviewer"))) ? role : "developer";
+        String resolvedRole = resolveRole(role);
+        // Only developers respect the canCreatePr flag; maintainers always have it; reader/reviewer never get it
+        boolean effectiveCanCreatePr = "maintainer".equals(resolvedRole)
+                || ("developer".equals(resolvedRole) && canCreatePr);
         var col = RepoCollaborator.builder()
                 .ownerUsername(ownerUsername)
                 .repoName(repoName)
                 .collaboratorUsername(collaboratorUsername)
-                .canCreatePr(canCreatePr)
+                .canCreatePr(effectiveCanCreatePr)
                 .role(resolvedRole)
                 .build();
         col = collaboratorRepository.save(col);
@@ -232,10 +245,29 @@ public class CollaboratorService {
         var col = collaboratorRepository.findByOwnerUsernameAndRepoNameAndCollaboratorUsername(
                 ownerUsername, repoName, collaboratorUsername)
                 .orElseThrow(() -> new IllegalArgumentException("Collaborator not found"));
-        String resolvedRole = (role != null && (role.equals("developer") || role.equals("reviewer"))) ? role : "developer";
+        String resolvedRole = resolveRole(role);
         col.setRole(resolvedRole);
+        // Sync canCreatePr with the new role automatically
+        if ("maintainer".equals(resolvedRole)) {
+            col.setCanCreatePr(true);
+        } else if (!"developer".equals(resolvedRole)) {
+            // reader and reviewer never get write flag
+            col.setCanCreatePr(false);
+        }
         col = collaboratorRepository.save(col);
         return toDto(col);
+    }
+
+    /**
+     * Normalizes a role string. Valid values: "reader", "developer", "reviewer", "maintainer".
+     * Falls back to "reader" (safest default) for any unknown/null input.
+     */
+    private String resolveRole(String role) {
+        if ("developer".equals(role) || "reviewer".equals(role)
+                || "reader".equals(role) || "maintainer".equals(role)) {
+            return role;
+        }
+        return "reader";
     }
 
     public List<CollaboratorDto> listCollaborators(String ownerUsername, String repoName) {
@@ -269,6 +301,7 @@ public class CollaboratorService {
                 .status(r.getStatus().name())
                 .message(r.getMessage())
                 .invitedByUsername(r.getInvitedByUsername())
+                .role(r.getRole() != null ? r.getRole() : "reader")
                 .createdAt(r.getCreatedAt())
                 .build();
     }

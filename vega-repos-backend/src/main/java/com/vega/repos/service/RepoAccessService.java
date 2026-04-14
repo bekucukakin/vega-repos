@@ -93,7 +93,8 @@ public class RepoAccessService {
     }
 
     /**
-     * Returns the role of the user in the repo: "owner", "developer", "reviewer", or null (no access).
+     * Returns the role of the user in the repo:
+     * "owner", "maintainer", "developer", "reviewer", "reader", or null (no access).
      */
     public String getCollaboratorRole(String currentUser, String ownerUsername, String repoName) {
         if (currentUser == null) return null;
@@ -106,65 +107,96 @@ public class RepoAccessService {
 
     /**
      * Can the user CREATE a PR?
-     * Owner, developer, or reviewer can create PRs.
-     * Reviewer is a superset of developer — they can do everything a developer can, plus approve.
+     * Owner and maintainer always can.
+     * Developer can if canCreatePr=true.
+     * Reviewer and reader cannot — read-only roles.
      */
     public boolean canCreatePrInRepo(String currentUser, String ownerUsername, String repoName) {
         if (currentUser == null) return false;
         if (currentUser.equals(ownerUsername)) return true;
         return collaboratorRepository.findByOwnerUsernameAndRepoNameAndCollaboratorUsername(
                         ownerUsername, repoName, currentUser)
-                .map(c -> Boolean.TRUE.equals(c.getCanCreatePr()))
+                .map(c -> {
+                    String r = c.getRole();
+                    if ("maintainer".equals(r)) return true;
+                    return "developer".equals(r) && Boolean.TRUE.equals(c.getCanCreatePr());
+                })
                 .orElse(false);
     }
 
     /**
      * Can the user APPROVE/REJECT a PR?
-     * Only reviewer or owner. Developers cannot approve.
-     * Self-approval is blocked at call site (author check).
+     * Owner, maintainer, and reviewer. Developers and readers cannot approve.
+     * Self-approval is blocked at the service level (author check in updatePrStatus).
      */
     public boolean canApprovePrInRepo(String currentUser, String ownerUsername, String repoName) {
         if (currentUser == null) return false;
         if (currentUser.equals(ownerUsername)) return true;
         return collaboratorRepository.findByOwnerUsernameAndRepoNameAndCollaboratorUsername(
                         ownerUsername, repoName, currentUser)
-                .map(c -> "reviewer".equals(c.getRole()))
+                .map(c -> "reviewer".equals(c.getRole()) || "maintainer".equals(c.getRole()))
                 .orElse(false);
     }
 
     /**
      * Can the user MERGE a PR?
-     * Owner, developer, or reviewer (reviewer is superset of developer).
-     * Self-merge of own unreviewed PR is blocked at call site.
+     * Owner, maintainer, and developer can merge.
+     * Reviewer and reader cannot — merging is a write operation.
+     * Self-merge of own unapproved PR is blocked at call site.
      */
     public boolean canMergePrInRepo(String currentUser, String ownerUsername, String repoName) {
         if (currentUser == null) return false;
         if (currentUser.equals(ownerUsername)) return true;
         String role = getCollaboratorRole(currentUser, ownerUsername, repoName);
-        return "developer".equals(role) || "reviewer".equals(role);
+        return "developer".equals(role) || "maintainer".equals(role);
     }
 
     /**
      * Can this user push to a protected branch (main/master)?
-     * Only owner or collaborator. Public repos: non-collaborators must use branches + PR flow.
+     * Owner, maintainer, and developer can push.
+     * Reviewer and reader have read-only access.
      */
     public boolean canPushToProtectedBranch(String currentUser, String ownerUsername, String repoName) {
         if (currentUser == null) return false;
         if (currentUser.equals(ownerUsername)) return true;
-        return collaboratorRepository.existsByOwnerUsernameAndRepoNameAndCollaboratorUsername(
-                ownerUsername, repoName, currentUser);
+        String role = getCollaboratorRole(currentUser, ownerUsername, repoName);
+        return "developer".equals(role) || "maintainer".equals(role);
     }
 
     /**
-     * Can this user push to any branch (non-protected) in a public repo?
-     * Any authenticated user can push to feature branches in public repos.
+     * Can this user push to a feature (non-protected) branch?
+     * Owner, maintainer, and developer can push.
+     * Reviewer and reader have read-only access.
+     * Public visibility means read/clone access, not write.
      */
     public boolean canPushToFeatureBranch(String currentUser, String ownerUsername, String repoName) {
         if (currentUser == null) return false;
         if (currentUser.equals(ownerUsername)) return true;
-        if (collaboratorRepository.existsByOwnerUsernameAndRepoNameAndCollaboratorUsername(
-                ownerUsername, repoName, currentUser)) return true;
-        return repoSettingsRepository.existsByOwnerUsernameAndRepoNameAndIsPublicTrue(ownerUsername, repoName);
+        String role = getCollaboratorRole(currentUser, ownerUsername, repoName);
+        return "developer".equals(role) || "maintainer".equals(role);
+    }
+
+    /**
+     * Can this user manage collaborators (invite, add, update roles, remove)?
+     * Owner always can. Maintainer can manage collaborators but cannot escalate to owner/maintainer.
+     * That privilege-escalation guard is enforced at the controller level.
+     */
+    public boolean canManageCollaborators(String currentUser, String ownerUsername, String repoName) {
+        if (currentUser == null) return false;
+        if (currentUser.equals(ownerUsername)) return true;
+        String role = getCollaboratorRole(currentUser, ownerUsername, repoName);
+        return "maintainer".equals(role);
+    }
+
+    /**
+     * Can this user change repo settings (visibility, description)?
+     * Owner always can. Maintainer can change settings but cannot delete the repo.
+     */
+    public boolean canChangeRepoSettings(String currentUser, String ownerUsername, String repoName) {
+        if (currentUser == null) return false;
+        if (currentUser.equals(ownerUsername)) return true;
+        String role = getCollaboratorRole(currentUser, ownerUsername, repoName);
+        return "maintainer".equals(role);
     }
 
     public boolean isOwner(String currentUser, String ownerUsername) {

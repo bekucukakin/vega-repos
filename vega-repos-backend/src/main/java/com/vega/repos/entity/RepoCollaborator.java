@@ -40,8 +40,11 @@ public class RepoCollaborator {
     private Boolean canCreatePr = true;
 
     /**
-     * Collaborator role: "developer" (can create/push PRs, cannot approve own PR)
-     * or "reviewer" (can only review/approve/reject PRs, cannot create PRs or push).
+     * Collaborator role:
+     * - "reader"     → read/clone only; cannot push, create PRs, review, or merge
+     * - "developer"  → push, create PRs (if canCreatePr=true), merge approved PRs; cannot review
+     * - "reviewer"   → review/approve/reject PRs only; cannot push, create PRs, or merge
+     * - "maintainer" → push, create PRs, review, merge + manage collaborators + repo settings; cannot delete repo
      * DB column must not be {@code ROLE} — reserved in H2; old DBs may lack this column until ddl-auto adds it.
      */
     @Column(name = "collaborator_role", nullable = false, length = 50)
