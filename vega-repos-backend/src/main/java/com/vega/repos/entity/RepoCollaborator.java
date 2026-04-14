@@ -34,10 +34,11 @@ public class RepoCollaborator {
 
     /**
      * Can create/approve/merge PRs. Owner always has this. Collaborators can have it.
+     * Defaults to false — always set explicitly via role-aware service logic.
      */
     @Column(name = "can_create_pr", nullable = false)
     @Builder.Default
-    private Boolean canCreatePr = true;
+    private Boolean canCreatePr = false;
 
     /**
      * Collaborator role:

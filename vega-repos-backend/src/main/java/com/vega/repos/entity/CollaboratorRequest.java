@@ -43,7 +43,7 @@ public class CollaboratorRequest {
     private String invitedByUsername;
 
     /**
-     * Intended role for this request/invite: "reader", "developer", or "reviewer".
+     * Intended role for this request/invite: "reader", "developer", "reviewer", or "maintainer".
      * For invites: set by owner at invite time, applied when invitee accepts.
      * For access requests: set by owner at approve time. Null = defaults to "reader".
      */

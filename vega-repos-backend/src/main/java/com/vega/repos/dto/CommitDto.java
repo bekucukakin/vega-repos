@@ -23,6 +23,8 @@ public class CommitDto {
     private Boolean aiGenerated;
     /** Parent commit full hash (null for root commits) */
     private String parentHash;
+    /** Second parent full hash (only set for merge commits) */
+    private String secondParentHash;
     /** Branch names that point to this commit (tip commits) */
     private List<String> branches;
 }

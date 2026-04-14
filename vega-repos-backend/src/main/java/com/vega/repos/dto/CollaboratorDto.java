@@ -13,6 +13,6 @@ public class CollaboratorDto {
     private Long id;
     private String username;
     private boolean canCreatePr;
-    /** "developer" or "reviewer" */
+    /** "reader", "developer", "reviewer", or "maintainer" */
     private String role;
 }
