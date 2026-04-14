@@ -171,6 +171,12 @@ function buildGraphLayout(commits) {
       }
     }
 
+    // If lane ended up truly free (no parent), clear its stale color so
+    // reused slots don't inherit the wrong color from a previous branch
+    if (lanes[col] === null) {
+      laneColorArr[col] = null
+    }
+
     return {
       ...c,
       col,
@@ -184,7 +190,10 @@ function buildGraphLayout(commits) {
     }
   })
 
-  const maxLanes = Math.max(lanes.length, 1)
+  // Track the widest lane count seen during processing (JS array.length only grows)
+  let maxLanes = 1
+  result.forEach((r) => { if (r.activeLanesBefore.length > maxLanes) maxLanes = r.activeLanesBefore.length })
+  maxLanes = Math.max(maxLanes, lanes.length, 1)
   return result.map((r) => ({ ...r, totalLanes: maxLanes }))
 }
 
@@ -435,14 +444,31 @@ export default function RepoDetailPage() {
     }
   }
 
+  const [accessRequestError, setAccessRequestError] = useState('')
+  const [accessRequestLoading, setAccessRequestLoading] = useState(false)
+
   const handleRequestAccess = () => {
+    setAccessRequestError('')
+    setAccessRequestLoading(true)
     fetch(`${API_BASE}/repos/${username}/${repoName}/collaborators/request`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: '' }),
     })
-      .then((r) => r.ok ? setRequestAccessSent(true) : Promise.reject())
-      .catch(() => setError('Failed to send request'))
+      .then(async (r) => {
+        if (r.ok) {
+          setRequestAccessSent(true)
+        } else {
+          const data = await r.json().catch(() => null)
+          if (r.status === 400) {
+            setAccessRequestError(data?.message || 'Request already sent or you are already a collaborator.')
+          } else {
+            setAccessRequestError('Failed to send request. Please try again.')
+          }
+        }
+      })
+      .catch(() => setAccessRequestError('Network error. Please try again.'))
+      .finally(() => setAccessRequestLoading(false))
   }
 
   if (loading) return <div className={styles.loading}>Loading...</div>
@@ -456,7 +482,14 @@ export default function RepoDetailPage() {
           {requestAccessSent ? (
             <p className={styles.empty}>Request sent. The owner will be notified.</p>
           ) : (
-            <button onClick={handleRequestAccess}>Request Access</button>
+            <>
+              <button onClick={handleRequestAccess} disabled={accessRequestLoading}>
+                {accessRequestLoading ? 'Sending...' : 'Request Access'}
+              </button>
+              {accessRequestError && (
+                <p className={styles.error} style={{marginTop:'var(--space-3)'}}>{accessRequestError}</p>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -716,24 +749,25 @@ export default function RepoDetailPage() {
                             </div>
                           </td>
                           <td className={styles.ghBranchesTdCommit}>
-                            <div
-                              className={styles.ghCommitMeta}
-                              title={
-                                [b.tipMessage?.trim(), b.tipAuthor?.trim() ? `by ${b.tipAuthor.trim()}` : '']
-                                  .filter(Boolean)
-                                  .join(' · ') || undefined
-                              }
-                            >
-                              <code className={styles.ghCommitHash} title={b.commitHash || ''}>{shortH || '—'}</code>
-                              <span className={styles.ghCommitAuthor}>
-                                {b.tipAuthor?.trim() ? (
-                                  <>
-                                    Last commit by <strong className={styles.ghCommitAuthorName}>{b.tipAuthor.trim()}</strong>
-                                  </>
-                                ) : (
-                                  <span className={styles.ghCommitUnknown}>Unknown author</span>
-                                )}
-                              </span>
+                            <div className={styles.ghCommitMeta}>
+                              {b.tipMessage?.trim() && (
+                                <span
+                                  className={styles.ghCommitMessage}
+                                  title={b.tipMessage.trim()}
+                                >
+                                  {b.tipMessage.trim()}
+                                </span>
+                              )}
+                              <div className={styles.ghCommitSubRow}>
+                                <code className={styles.ghCommitHash} title={b.commitHash || ''}>{shortH || '—'}</code>
+                                <span className={styles.ghCommitAuthor}>
+                                  {b.tipAuthor?.trim() ? (
+                                    <>by <strong className={styles.ghCommitAuthorName}>{b.tipAuthor.trim()}</strong></>
+                                  ) : (
+                                    <span className={styles.ghCommitUnknown}>Unknown author</span>
+                                  )}
+                                </span>
+                              </div>
                             </div>
                           </td>
                           <td className={styles.ghBranchesTdIcon}>
@@ -814,6 +848,9 @@ export default function RepoDetailPage() {
             <p className={styles.empty}>No commits</p>
           ) : (
             <div className={styles.graphContainer}>
+              <div className={styles.graphHeader}>
+                <span className={styles.graphHeaderCount}>{graphCommits.length} commits</span>
+              </div>
               {graphCommits.map((c) => {
                 const ROW_H = 56
                 const COL_W = 26
@@ -828,10 +865,10 @@ export default function RepoDetailPage() {
                   c.activeLanesBefore.forEach((hash, lane) => {
                     if (!hash || lane === c.col) return
                     const lx = lane * COL_W + COL_W / 2
-                    const passColor = c.laneColorsBefore?.[lane] || 'var(--border-default)'
+                    const passColor = c.laneColorsBefore?.[lane] || BRANCH_COLORS[lane % BRANCH_COLORS.length]
                     passLines.push(
                       <line key={`pass-${lane}`} x1={lx} y1={0} x2={lx} y2={ROW_H}
-                        stroke={passColor} strokeWidth="2" opacity="0.4" />
+                        stroke={passColor} strokeWidth="2" />
                     )
                   })
                 }
@@ -863,16 +900,15 @@ export default function RepoDetailPage() {
                 }
 
                 // MERGE line: from circle to secondary parent column (bezier)
+                // Always use the current commit's color — it was assigned to the new lane
                 let mergeLine = null
                 if (c.secondParentCol !== null) {
                   const spx = c.secondParentCol * COL_W + COL_W / 2
                   const cpY = cy + R + 1 + (ROW_H - cy - R - 1) * 0.5
-                  const mergeColor = c.laneColorsBefore?.[c.secondParentCol] ||
-                    BRANCH_COLORS[c.secondParentCol % BRANCH_COLORS.length]
                   mergeLine = (
                     <path
                       d={`M ${cx} ${cy + R + 1} C ${cx} ${cpY} ${spx} ${cpY} ${spx} ${ROW_H}`}
-                      stroke={mergeColor} strokeWidth="2.5" fill="none"
+                      stroke={c.color} strokeWidth="2.5" fill="none"
                     />
                   )
                 }
@@ -895,7 +931,13 @@ export default function RepoDetailPage() {
                       {c.isMerge && (
                         <circle cx={cx} cy={cy} r={R + 4} fill="none" stroke={c.color} strokeWidth="1.5" opacity="0.4" />
                       )}
-                      <circle cx={cx} cy={cy} r={R} fill={c.color} />
+                      <circle cx={cx} cy={cy} r={R} fill={c.color}>
+                        <title>
+                          {c.branches?.length > 0
+                            ? `Branch: ${c.branches.join(', ')}`
+                            : `Color: ${c.color}`}
+                        </title>
+                      </circle>
                       {!c.parentHash && (
                         <circle cx={cx} cy={cy} r={R + 3} fill="none" stroke={c.color} strokeWidth="1.5" opacity="0.5" />
                       )}
@@ -908,15 +950,25 @@ export default function RepoDetailPage() {
                         {c.aiGenerated && <span className={styles.vegaBadge} title="VEGA AI generated">VEGA</span>}
                         {c.isMerge && <span className={styles.mergeBadge}>Merge PR</span>}
                         {c.branches && c.branches.map((b) => (
-                          <span key={b} className={styles.graphBranchTag} style={{ borderColor: c.color, color: c.color }}>
-                            {b}
+                          <span
+                            key={b}
+                            className={styles.graphBranchTag}
+                            style={{ borderColor: c.color, color: c.color }}
+                            title={b.length > 14 ? b : undefined}
+                          >
+                            {b.length > 14 ? `${b.slice(0, 12)}…` : b}
                           </span>
                         ))}
                       </div>
                       <div className={styles.graphMetaRow}>
                         <code className={styles.graphHash}>{c.hash}</code>
                         <span className={styles.graphAuthor}>{c.author}</span>
-                        <span className={styles.graphDate}>{formatDate(c.timestamp)}</span>
+                        <span
+                          className={styles.graphDate}
+                          title={formatDate(c.timestamp)}
+                        >
+                          {formatRelativeUpdated(c.timestamp)}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1048,7 +1100,42 @@ export default function RepoDetailPage() {
                 {pendingRequests.map((r) => (
                   <div key={r.id} className={styles.collabItem}>
                     <span className={styles.collabName}>{r.requesterUsername}</span>
-                    <Link to="/collaborator-requests" className={styles.collabAction}>Review</Link>
+                    <div className={styles.collabItemActions}>
+                      <button
+                        type="button"
+                        className={styles.btnSuccessSmall}
+                        onClick={() => {
+                          fetch(`${API_BASE}/repos/${username}/${repoName}/collaborators/requests/${r.id}/approve`, {
+                            method: 'POST',
+                            headers,
+                          }).then((res) => {
+                            if (res.ok) {
+                              setPendingRequests((prev) => prev.filter((x) => x.id !== r.id))
+                              fetch(`${API_BASE}/repos/${username}/${repoName}/collaborators`, { headers })
+                                .then((res2) => res2.ok ? res2.json() : [])
+                                .then(setCollaborators)
+                                .catch(() => {})
+                            }
+                          }).catch(() => {})
+                        }}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.btnDangerSmall}
+                        onClick={() => {
+                          fetch(`${API_BASE}/repos/${username}/${repoName}/collaborators/requests/${r.id}/reject`, {
+                            method: 'POST',
+                            headers,
+                          }).then((res) => {
+                            if (res.ok) setPendingRequests((prev) => prev.filter((x) => x.id !== r.id))
+                          }).catch(() => {})
+                        }}
+                      >
+                        Reject
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
