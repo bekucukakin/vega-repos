@@ -79,7 +79,7 @@ public class RepoController {
         return ResponseEntity.ok(repoService.searchRepositories(query, currentUser));
     }
 
-    /** Set repo visibility (public/private). Owner only. */
+    /** Set repo visibility/description. Owner or maintainer. Delete repo remains owner-only. */
     @PostMapping("/{username}/{repoName}/settings")
     public ResponseEntity<Void> updateRepoSettings(
             @RequestHeader(value = "Authorization", required = false) String auth,
@@ -87,7 +87,7 @@ public class RepoController {
             @RequestBody Map<String, Object> body) {
         String currentUser = repoAccessService.resolveUsername(auth);
         if (currentUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        if (!repoAccessService.isOwner(currentUser, username)) {
+        if (!repoAccessService.canChangeRepoSettings(currentUser, username, repoName)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         Boolean isPublic = body.containsKey("isPublic") ? (Boolean) body.get("isPublic") : null;
@@ -195,7 +195,7 @@ public class RepoController {
         // Only owner or developer collaborator can create PRs (not reviewers)
         if (!repoAccessService.canCreatePrInRepo(currentUser, username, repoName)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "Only owner or developer collaborators can create pull requests"));
+                    .body(Map.of("error", "Only owner, maintainer, or developer collaborators can create pull requests"));
         }
         String sourceBranch = body.get("sourceBranch");
         String targetBranch = body.get("targetBranch");
@@ -307,7 +307,10 @@ public class RepoController {
         if (!repoService.updatePullRequestApprove(username, repoName, prId, currentUser)) {
             return ResponseEntity.notFound().build();
         }
-        metricsService.recordPrApproved(currentUser, 0L, true);
+        long reviewTimeMs = (pr != null && pr.getReviewStartedAt() != null)
+                ? Math.max(0L, System.currentTimeMillis() - pr.getReviewStartedAt()) : 0L;
+        boolean hadFeature = pr != null && pr.getRiskLevel() != null && !pr.getRiskLevel().isBlank();
+        metricsService.recordPrApproved(currentUser, reviewTimeMs, hadFeature);
         return ResponseEntity.ok().build();
     }
 
@@ -321,9 +324,9 @@ public class RepoController {
         if (!repoAccessService.canMergePrInRepo(currentUser, username, repoName)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        // Developer/reviewer cannot merge their own PR unless it was approved by someone else
+        // Developer and maintainer cannot merge their own PR unless it was approved by someone else
         String role = repoAccessService.getCollaboratorRole(currentUser, username, repoName);
-        if ("developer".equals(role) || "reviewer".equals(role)) {
+        if ("developer".equals(role) || "maintainer".equals(role)) {
             PrDto prCheck = repoService.getPullRequest(username, repoName, prId);
             if (prCheck != null && currentUser.equals(prCheck.getAuthor())
                     && (prCheck.getApprovedBy() == null || currentUser.equals(prCheck.getApprovedBy()))) {
@@ -355,7 +358,10 @@ public class RepoController {
         if (!repoService.updatePullRequestReject(username, repoName, prId, currentUser)) {
             return ResponseEntity.notFound().build();
         }
-        metricsService.recordPrRejected(currentUser);
+        long reviewTimeMs = (pr != null && pr.getReviewStartedAt() != null)
+                ? Math.max(0L, System.currentTimeMillis() - pr.getReviewStartedAt()) : 0L;
+        boolean hadFeature = pr != null && pr.getRiskLevel() != null && !pr.getRiskLevel().isBlank();
+        metricsService.recordPrRejected(currentUser, reviewTimeMs, hadFeature);
         return ResponseEntity.ok().build();
     }
 
