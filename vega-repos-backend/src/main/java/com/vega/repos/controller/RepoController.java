@@ -290,7 +290,7 @@ public class RepoController {
     }
 
     @PostMapping("/{username}/{repoName}/pull-requests/{prId}/approve")
-    public ResponseEntity<Void> approvePr(
+    public ResponseEntity<Map<String, String>> approvePr(
             @RequestHeader(value = "Authorization", required = false) String auth,
             @PathVariable String username, @PathVariable String repoName, @PathVariable String prId) {
         String currentUser = repoAccessService.resolveUsername(auth);
@@ -303,6 +303,11 @@ public class RepoController {
         PrDto pr = repoService.getPullRequest(username, repoName, prId);
         if (pr != null && currentUser.equals(pr.getAuthor())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        // Cannot approve a PR that has merge conflicts
+        if (pr != null && pr.isHasConflicts()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "Cannot approve: PR has merge conflicts that must be resolved first"));
         }
         if (!repoService.updatePullRequestApprove(username, repoName, prId, currentUser)) {
             return ResponseEntity.notFound().build();

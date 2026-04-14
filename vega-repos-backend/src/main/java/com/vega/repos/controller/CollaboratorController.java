@@ -131,8 +131,10 @@ public class CollaboratorController {
         }
         Object u = body.get("username");
         String username = (u != null) ? u.toString().trim() : null;
-        boolean canCreatePr = body.get("canCreatePr") != null ? (Boolean) body.get("canCreatePr") : true;
-        String role = body.get("role") != null ? body.get("role").toString() : "developer";
+        Object canCreatePrRaw = body.get("canCreatePr");
+        boolean canCreatePr = canCreatePrRaw == null || Boolean.parseBoolean(canCreatePrRaw.toString());
+        String rawRole = body.get("role") != null ? body.get("role").toString().trim() : "";
+        String role = rawRole.isEmpty() ? "developer" : rawRole;
         if (username == null || username.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
@@ -238,6 +240,8 @@ public class CollaboratorController {
             return ResponseEntity.badRequest().build();
         }
         String role = body != null ? body.get("role") : null;
+        // Normalize blank/empty role to null so resolveRole defaults to "reader"
+        if (role != null && role.isBlank()) role = null;
         if (!repoAccessService.isOwner(user, owner) && isMaintainerOrAbove(role)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }

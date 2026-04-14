@@ -38,7 +38,8 @@ public class CollaboratorService {
         }
         var existing = requestRepository.findByOwnerUsernameAndRepoNameAndRequesterUsernameAndStatus(
                 ownerUsername, repoName, requesterUsername, Status.PENDING);
-        if (existing.isPresent()) {
+        // Only block if there is already a pending ACCESS REQUEST (not an invite from the owner)
+        if (existing.isPresent() && existing.get().getInvitedByUsername() == null) {
             throw new IllegalArgumentException("Request already pending");
         }
         var req = CollaboratorRequest.builder()
@@ -66,8 +67,9 @@ public class CollaboratorService {
         }
         var existing = requestRepository.findByOwnerUsernameAndRepoNameAndRequesterUsernameAndStatus(
                 ownerUsername, repoName, inviteeUsername, Status.PENDING);
-        if (existing.isPresent()) {
-            throw new IllegalArgumentException("Invite already sent");
+        // Only block if there is already a pending INVITE (not an access request from the invitee)
+        if (existing.isPresent() && existing.get().getInvitedByUsername() != null) {
+            throw new IllegalArgumentException("Invite already pending");
         }
         var req = CollaboratorRequest.builder()
                 .requesterUsername(inviteeUsername)
@@ -138,7 +140,7 @@ public class CollaboratorService {
         var req = requestRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Request not found"));
         if (!req.getOwnerUsername().equals(ownerUsername)) {
-            throw new IllegalArgumentException("Only owner can approve");
+            throw new IllegalArgumentException("Request does not belong to this repository");
         }
         if (req.getStatus() != Status.PENDING) {
             throw new IllegalArgumentException("Request already processed");
@@ -163,7 +165,7 @@ public class CollaboratorService {
         var req = requestRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Request not found"));
         if (!req.getOwnerUsername().equals(ownerUsername)) {
-            throw new IllegalArgumentException("Only owner can reject");
+            throw new IllegalArgumentException("Request does not belong to this repository");
         }
         if (req.getStatus() != Status.PENDING) {
             throw new IllegalArgumentException("Request already processed");
@@ -204,6 +206,7 @@ public class CollaboratorService {
         return requestRepository.findByOwnerUsernameAndRepoNameAndStatus(
                         ownerUsername, repoName, Status.PENDING)
                 .stream()
+                .filter(r -> r.getInvitedByUsername() == null)
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
@@ -248,10 +251,10 @@ public class CollaboratorService {
         String resolvedRole = resolveRole(role);
         col.setRole(resolvedRole);
         // Sync canCreatePr with the new role automatically
-        if ("maintainer".equals(resolvedRole)) {
+        if ("maintainer".equals(resolvedRole) || "developer".equals(resolvedRole)) {
             col.setCanCreatePr(true);
-        } else if (!"developer".equals(resolvedRole)) {
-            // reader and reviewer never get write flag
+        } else {
+            // reader and reviewer: read-only, never get create-PR permission
             col.setCanCreatePr(false);
         }
         col = collaboratorRepository.save(col);

@@ -81,6 +81,7 @@ public class MetricsService {
                     // Count each PR once (owned by repo owner, represents global state)
                     totalPrs += prs.size();
                     for (PrDto pr : prs) {
+                        if (pr == null) continue;
                         switch (pr.getStatus() != null ? pr.getStatus() : "") {
                             case "OPEN" -> openC++;
                             case "REVIEWING" -> reviewingC++;
@@ -167,6 +168,7 @@ public class MetricsService {
             for (RepoDto repo : repos) {
                 List<PrDto> prs = repoService.getPullRequests(username, repo.getName());
                 for (PrDto pr : prs) {
+                    if (pr == null) continue;
                     // Only count PRs that this user authored (filter collaborator repos)
                     if (!username.equalsIgnoreCase(pr.getAuthor())) continue;
                     totalPrs++;

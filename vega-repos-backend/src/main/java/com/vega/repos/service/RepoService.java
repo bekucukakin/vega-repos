@@ -456,11 +456,19 @@ public class RepoService {
     }
 
     private void walkCommitChain(String username, String repoName, String commitHash, Set<String> visited, int limit) {
-        String current = commitHash;
-        while (current != null && !visited.contains(current) && visited.size() < limit) {
-            visited.add(current);
-            current = getParentHashFromCommit(username, repoName, current);
+        if (commitHash == null || visited.contains(commitHash) || visited.size() >= limit) return;
+        visited.add(commitHash);
+        String content = readCommitObject(username, repoName, commitHash);
+        if (content == null) return;
+        String p1 = null, p2 = null;
+        for (String line : content.replace("\r", "").split("\n")) {
+            if (line.startsWith("parent ")) {
+                if (p1 == null) p1 = line.substring(7).trim();
+                else { p2 = line.substring(7).trim(); break; }
+            }
         }
+        walkCommitChain(username, repoName, p1, visited, limit);
+        walkCommitChain(username, repoName, p2, visited, limit);
     }
 
     public List<FileTreeNodeDto> getFileTree(String username, String repoName, String branch) {
@@ -904,13 +912,18 @@ public class RepoService {
         String author = "";
         long timestamp = 0L;
         String parentHash = null;
+        String secondParentHash = null;
 
         content = content.replace("\r", "");
 
         // Author line: VEGA CommitObj — last whitespace-separated token is epoch seconds (see CommitObj.getStorageBytes)
         for (String line : content.split("\n")) {
             if (line.startsWith("parent ")) {
-                parentHash = line.substring(7).trim();
+                if (parentHash == null) {
+                    parentHash = line.substring(7).trim();
+                } else {
+                    secondParentHash = line.substring(7).trim();
+                }
             } else if (line.startsWith("author ")) {
                 String authorLine = line.substring(7).trim().replaceAll("\\s+", " ");
                 if (!authorLine.isEmpty()) {
@@ -949,6 +962,7 @@ public class RepoService {
                 .timestamp(timestamp)
                 .aiGenerated(aiGenerated)
                 .parentHash(parentHash)
+                .secondParentHash(secondParentHash)
                 .build();
     }
 
