@@ -3,10 +3,12 @@ package com.vega.repos.controller;
 import com.vega.repos.dto.BranchDto;
 import com.vega.repos.dto.CommitDiffDto;
 import com.vega.repos.dto.CommitDto;
+import com.vega.repos.dto.CommitInsightDto;
 import com.vega.repos.dto.FileContentDto;
 import com.vega.repos.dto.FileTreeNodeDto;
 import com.vega.repos.dto.PrDto;
 import com.vega.repos.dto.RepoDto;
+import com.vega.repos.service.CommitInsightService;
 import com.vega.repos.service.MetricsService;
 import com.vega.repos.service.RepoAccessService;
 import com.vega.repos.service.RepoDownloadService;
@@ -38,6 +40,7 @@ public class RepoController {
     private final RepoFileService repoFileService;
     private final RepoAccessService repoAccessService;
     private final MetricsService metricsService;
+    private final CommitInsightService commitInsightService;
 
     @Value("${vega.agent-service.url:http://localhost:8084}")
     private String agentServiceUrl;
@@ -48,12 +51,13 @@ public class RepoController {
 
     public RepoController(RepoService repoService, RepoDownloadService repoDownloadService,
                           RepoFileService repoFileService, RepoAccessService repoAccessService,
-                          MetricsService metricsService) {
+                          MetricsService metricsService, CommitInsightService commitInsightService) {
         this.repoService = repoService;
         this.repoDownloadService = repoDownloadService;
         this.repoFileService = repoFileService;
         this.repoAccessService = repoAccessService;
         this.metricsService = metricsService;
+        this.commitInsightService = commitInsightService;
     }
 
     /** List repos for current user (own + collaborator). Requires Auth. */
@@ -556,5 +560,67 @@ public class RepoController {
         if (s == null) return "";
         return s.replace("\\", "\\\\").replace("\"", "\\\"")
                 .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────
+    // Commit Insights — community Q&A panel
+    // ──────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * List saved insights (Q&A) for a commit, best first.
+     * GET /api/repos/{username}/{repoName}/commits/{hash}/insights
+     */
+    @GetMapping("/{username}/{repoName}/commits/{hash}/insights")
+    public ResponseEntity<List<CommitInsightDto>> getCommitInsights(
+            @RequestHeader(value = "Authorization", required = false) String auth,
+            @PathVariable String username, @PathVariable String repoName,
+            @PathVariable String hash) {
+        String currentUser = repoAccessService.resolveUsername(auth);
+        if (currentUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        if (!repoAccessService.canAccess(currentUser, username, repoName)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        return ResponseEntity.ok(commitInsightService.getInsights(username, repoName, hash));
+    }
+
+    /**
+     * Save a new Q&A insight for a commit (user liked the AI answer and wants to keep it).
+     * POST /api/repos/{username}/{repoName}/commits/{hash}/insights
+     * Body: { question, answer }
+     */
+    @PostMapping("/{username}/{repoName}/commits/{hash}/insights")
+    public ResponseEntity<CommitInsightDto> saveCommitInsight(
+            @RequestHeader(value = "Authorization", required = false) String auth,
+            @PathVariable String username, @PathVariable String repoName,
+            @PathVariable String hash,
+            @RequestBody Map<String, String> body) {
+        String currentUser = repoAccessService.resolveUsername(auth);
+        if (currentUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        if (!repoAccessService.canAccess(currentUser, username, repoName)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        String question = body.get("question");
+        String answer = body.get("answer");
+        if (question == null || question.isBlank() || answer == null || answer.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        CommitInsightDto saved = commitInsightService.saveInsight(
+                username, repoName, hash, question.trim(), answer.trim(), currentUser);
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+    }
+
+    /**
+     * Like an insight — increments its like counter.
+     * POST /api/repos/insights/{insightId}/like
+     */
+    @PostMapping("/insights/{insightId}/like")
+    public ResponseEntity<CommitInsightDto> likeInsight(
+            @RequestHeader(value = "Authorization", required = false) String auth,
+            @PathVariable Long insightId) {
+        String currentUser = repoAccessService.resolveUsername(auth);
+        if (currentUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        return commitInsightService.likeInsight(insightId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 }
