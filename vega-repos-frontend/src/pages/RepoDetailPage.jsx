@@ -233,6 +233,14 @@ export default function RepoDetailPage() {
   const [userRole, setUserRole] = useState('public')
   const [inviteRole, setInviteRole] = useState('developer')
 
+  // ── AI Commit Panel state ─────────────────────────────────────────────
+  const [aiAnalysis, setAiAnalysis] = useState(null)      // { summary, changes, risks, riskLevel }
+  const [aiLoading, setAiLoading] = useState(false)
+  const [chatHistory, setChatHistory] = useState([])       // [{role,message}]
+  const [chatInput, setChatInput] = useState('')
+  const [chatSending, setChatSending] = useState(false)
+  const [savedInsights, setSavedInsights] = useState([])   // persisted Q&A from DB
+
   const loadRepoData = useCallback(async () => {
     setAccessDenied(false)
     try {
@@ -430,18 +438,108 @@ export default function RepoDetailPage() {
     setSelectedCommit(c)
     setDiffLoading(true)
     setCommitDiff(null)
+    setAiAnalysis(null)
+    setAiLoading(true)
+    setChatHistory([])
+    setChatInput('')
+    setSavedInsights([])
+
+    const hashForDiff = c.fullHash || c.hash
+
+    // Run diff + AI analysis + saved insights in parallel
+    const [diffRes, insightsRes] = await Promise.allSettled([
+      fetch(`${API_BASE}/repos/${username}/${repoName}/commits/${encodeURIComponent(hashForDiff)}/diff`, { headers }),
+      fetch(`${API_BASE}/repos/${username}/${repoName}/commits/${encodeURIComponent(hashForDiff)}/insights`, { headers }),
+    ])
+
+    if (diffRes.status === 'fulfilled' && diffRes.value.ok) {
+      setCommitDiff(await diffRes.value.json())
+    } else {
+      setCommitDiff(null)
+    }
+    setDiffLoading(false)
+
+    if (insightsRes.status === 'fulfilled' && insightsRes.value.ok) {
+      setSavedInsights(await insightsRes.value.json())
+    }
+
+    // AI analysis (separate — can be slow)
     try {
-      const hashForDiff = c.fullHash || c.hash
-      const res = await fetch(`${API_BASE}/repos/${username}/${repoName}/commits/${encodeURIComponent(hashForDiff)}/diff`, { headers })
+      const aiRes = await fetch('http://localhost:8084/api/agent/analyze-commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({
+          commitHash: hashForDiff,
+          commitMessage: c.message,
+          author: c.author,
+          diff: '',
+        }),
+      })
+      if (aiRes.ok) {
+        const data = await aiRes.json()
+        if (data.success) setAiAnalysis(data)
+      }
+    } catch { /* AI unavailable — panel stays empty */ } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const handleSendChat = async () => {
+    if (!chatInput.trim() || chatSending || !selectedCommit) return
+    const question = chatInput.trim()
+    setChatInput('')
+    setChatSending(true)
+    const newHistory = [...chatHistory, { role: 'user', message: question }]
+    setChatHistory(newHistory)
+    try {
+      const c = selectedCommit
+      const commitContext = `Commit: ${c.fullHash || c.hash}\nMessage: ${c.message}\nAuthor: ${c.author}`
+      const res = await fetch('http://localhost:8084/api/agent/commit-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ commitContext, question, history: chatHistory }),
+      })
       if (res.ok) {
         const data = await res.json()
-        setCommitDiff(data)
+        if (data.success) {
+          setChatHistory([...newHistory, { role: 'assistant', message: data.answer, question }])
+        }
       }
-    } catch {
-      setCommitDiff(null)
-    } finally {
-      setDiffLoading(false)
+    } catch { /* silent */ } finally {
+      setChatSending(false)
     }
+  }
+
+  const handleSaveInsight = async (question, answer) => {
+    if (!selectedCommit) return
+    const hashForDiff = selectedCommit.fullHash || selectedCommit.hash
+    try {
+      const res = await fetch(
+        `${API_BASE}/repos/${username}/${repoName}/commits/${encodeURIComponent(hashForDiff)}/insights`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headers },
+          body: JSON.stringify({ question, answer }),
+        }
+      )
+      if (res.ok) {
+        const saved = await res.json()
+        setSavedInsights((prev) => [saved, ...prev])
+      }
+    } catch { /* silent */ }
+  }
+
+  const handleLikeInsight = async (insightId) => {
+    try {
+      const res = await fetch(`${API_BASE}/repos/insights/${insightId}/like`, {
+        method: 'POST', headers,
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        setSavedInsights((prev) => prev.map((i) => i.id === insightId ? updated : i)
+          .sort((a, b) => b.likes - a.likes))
+      }
+    } catch { /* silent */ }
   }
 
   const [accessRequestError, setAccessRequestError] = useState('')
@@ -979,51 +1077,267 @@ export default function RepoDetailPage() {
           {selectedCommit && (
             <div className={styles.diffModal} onClick={() => setSelectedCommit(null)}>
               <div className={styles.diffModalContent} onClick={(e) => e.stopPropagation()}>
-                <div className={styles.diffModalHeader}>
-                  <div className={styles.diffModalTitleBlock}>
-                    <h3 className={styles.diffModalHashLine}>Commit {selectedCommit.hash}</h3>
-                    <p className={styles.diffModalMessageLine}>{selectedCommit.message || '(no message)'}</p>
+
+                {/* ── Header ─────────────────────────────────────────── */}
+                <div className={styles.cmHeader}>
+                  <div className={styles.cmHeaderLeft}>
+                    <div className={styles.cmHashRow}>
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style={{color:'var(--text-tertiary)',flexShrink:0}}>
+                        <path d="M1.643 3.143L.427 1.927A.25.25 0 000 2.104V5.75c0 .138.112.25.25.25h3.646a.25.25 0 00.177-.427L2.715 4.215a6.5 6.5 0 11-1.18 4.458.75.75 0 10-1.493.154 8.001 8.001 0 101.6-5.684zM7.75 4a.75.75 0 01.75.75v2.992l2.028.812a.75.75 0 01-.557 1.392l-2.5-1A.75.75 0 017 8.25v-3.5A.75.75 0 017.75 4z"/>
+                      </svg>
+                      <code className={styles.cmHash}>{selectedCommit.hash}</code>
+                      {selectedCommit.aiGenerated && <span className={styles.cmAiBadge}>AI generated</span>}
+                      {selectedCommit.isMerge && <span className={styles.cmMergeBadge}>Merge commit</span>}
+                    </div>
+                    <p className={styles.cmMessage}>{selectedCommit.message || '(no message)'}</p>
+                    <div className={styles.cmMeta}>
+                      <span className={styles.cmAuthor}>{selectedCommit.author}</span>
+                      <span className={styles.cmMetaDot}>·</span>
+                      <span className={styles.cmDate}>{selectedCommit.timestamp ? new Date(selectedCommit.timestamp).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'}) : ''}</span>
+                    </div>
                   </div>
-                  <button type="button" className={styles.diffModalClose} onClick={() => setSelectedCommit(null)}>×</button>
+                  <button type="button" className={styles.diffModalClose} onClick={() => setSelectedCommit(null)} aria-label="Close">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+                  </button>
                 </div>
-                {diffLoading ? (
-                  <p className={styles.loading}>Loading diff...</p>
-                ) : commitDiff ? (
-                  <div className={styles.diffBody}>
-                    {commitDiff.files && commitDiff.files.length === 0 ? (
-                      <p className={styles.empty}>(No file changes — initial commit)</p>
-                    ) : (
-                      commitDiff.files?.map((f) => (
-                        <div key={f.path} className={styles.diffFile}>
-                          <div className={styles.diffFileHeader}>
-                            <span className={styles.diffPath}>{f.path}</span>
-                            <span className={`${styles.diffStatus} ${f.status === 'added' ? styles.diffAdded : f.status === 'deleted' ? styles.diffDeleted : styles.diffModified}`}>{f.status}</span>
-                          </div>
-                          {f.unifiedDiff && (
-                            <div className={styles.diffContent}>
-                              {f.unifiedDiff.split('\n').map((line, i) => (
-                                <div
-                                  key={i}
-                                  className={
+
+                {/* ── Two-panel body ─────────────────────────────────── */}
+                <div className={styles.commitPanelBody}>
+
+                  {/* LEFT: Diff ─────────────────────────────────────── */}
+                  <div className={styles.commitDiffSide}>
+                    <div className={styles.diffPanelHeader}>
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style={{color:'var(--text-tertiary)'}}>
+                        <path d="M2.75 1h10.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25V2.75C1 1.784 1.784 1 2.75 1zm0 1.5a.25.25 0 00-.25.25v10.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25V2.75a.25.25 0 00-.25-.25H2.75z"/>
+                        <path d="M8 4a.75.75 0 01.75.75V6.5h1.75a.75.75 0 010 1.5H8.75v1.75a.75.75 0 01-1.5 0V8H5.5a.75.75 0 010-1.5h1.75V4.75A.75.75 0 018 4z"/>
+                      </svg>
+                      <span>Changed files</span>
+                      {commitDiff?.files && <span className={styles.diffFileCount}>{commitDiff.files.length}</span>}
+                    </div>
+
+                    {diffLoading ? (
+                      <div className={styles.diffLoadingState}>
+                        <span className={styles.spinner} />
+                        <span>Loading diff...</span>
+                      </div>
+                    ) : commitDiff?.files?.length > 0 ? (
+                      <div className={styles.diffBody}>
+                        {commitDiff.files.map((f) => (
+                          <div key={f.path} className={styles.diffFile}>
+                            <div className={styles.diffFileHeader}>
+                              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style={{color:'var(--text-tertiary)',flexShrink:0}}>
+                                <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0113.25 16h-9.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 019 4.25V1.5H3.75zm6.75.896V4.25c0 .138.112.25.25.25h1.854L10.5 2.396z"/>
+                              </svg>
+                              <span className={styles.diffPath}>{f.path}</span>
+                              <span className={`${styles.diffStatus} ${f.status === 'added' ? styles.diffAdded : f.status === 'deleted' ? styles.diffDeleted : styles.diffModified}`}>
+                                {f.status}
+                              </span>
+                            </div>
+                            {f.unifiedDiff && f.unifiedDiff !== '(binary file changed)' ? (
+                              <div className={styles.diffContent}>
+                                {f.unifiedDiff.split('\n').map((line, i) => (
+                                  <div key={i} className={
                                     line.startsWith('---') || line.startsWith('+++') ? styles.diffFileInfo :
                                     line.startsWith('@@') ? styles.diffHunk :
                                     line.startsWith('+') ? styles.diffAdd :
                                     line.startsWith('-') ? styles.diffDel :
                                     styles.diffContext
-                                  }
-                                >
-                                  {line}
-                                </div>
-                              ))}
+                                  }>{line || ' '}</div>
+                                ))}
+                              </div>
+                            ) : f.unifiedDiff === '(binary file changed)' ? (
+                              <div className={styles.diffBinary}>Binary file — diff not available</div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : commitDiff?.files?.length === 0 ? (
+                      <div className={styles.diffEmptyState}>
+                        <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor" style={{color:'var(--text-tertiary)',opacity:0.4}}>
+                          <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0113.25 16h-9.5A1.75 1.75 0 012 14.25V1.75z"/>
+                        </svg>
+                        <p>No file changes in this commit</p>
+                      </div>
+                    ) : (
+                      <div className={styles.diffEmptyState}>
+                        <p>Diff not available for this commit</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* RIGHT: AI Panel ─────────────────────────────────── */}
+                  <div className={styles.commitAiSide}>
+
+                    {/* Analysis card */}
+                    <div className={styles.aiCard}>
+                      <div className={styles.aiCardHeader}>
+                        <div className={styles.aiCardTitle}>
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style={{color:'var(--accent)'}}>
+                            <path d="M0 1.75A.75.75 0 01.75 1h4.253c1.227 0 2.317.59 3 1.501A3.744 3.744 0 0111.006 1h4.245a.75.75 0 01.75.75v10.5a.75.75 0 01-.75.75h-4.507a2.25 2.25 0 00-1.591.659l-.622.621a.75.75 0 01-1.06 0l-.622-.621A2.25 2.25 0 005.258 13H.75a.75.75 0 01-.75-.75Zm7.251 10.324l.004-5.073-.002-2.253A2.25 2.25 0 005.003 2.5H1.5v9h3.757a3.75 3.75 0 012 .584ZM8.755 4.75l-.004 7.322a3.752 3.752 0 012-.572H14.5v-9h-3.495a2.25 2.25 0 00-2.25 2.25Z"/>
+                          </svg>
+                          <span>Vega AI Analysis</span>
+                        </div>
+                        {aiAnalysis && (
+                          <span className={`${styles.riskPill} ${styles['risk' + aiAnalysis.riskLevel]}`}>
+                            {aiAnalysis.riskLevel === 'LOW' && '● '}
+                            {aiAnalysis.riskLevel === 'MEDIUM' && '● '}
+                            {aiAnalysis.riskLevel === 'HIGH' && '● '}
+                            {aiAnalysis.riskLevel} risk
+                          </span>
+                        )}
+                      </div>
+
+                      {aiLoading ? (
+                        <div className={styles.aiSkeletonWrap}>
+                          <div className={styles.aiSkeleton} style={{width:'92%'}} />
+                          <div className={styles.aiSkeleton} style={{width:'78%'}} />
+                          <div className={styles.aiSkeleton} style={{width:'85%',marginTop:'8px'}} />
+                          <div className={styles.aiSkeleton} style={{width:'60%'}} />
+                        </div>
+                      ) : aiAnalysis ? (
+                        <div className={styles.aiCardBody}>
+                          {aiAnalysis.summary && (
+                            <div className={styles.aiSection}>
+                              <div className={styles.aiSectionLabel}>What it does</div>
+                              <div className={styles.aiSectionText}>{aiAnalysis.summary}</div>
+                            </div>
+                          )}
+                          {aiAnalysis.changes && (
+                            <div className={styles.aiSection}>
+                              <div className={styles.aiSectionLabel}>What changed</div>
+                              <div className={styles.aiSectionText} style={{whiteSpace:'pre-line'}}>{aiAnalysis.changes}</div>
+                            </div>
+                          )}
+                          {aiAnalysis.risks && (
+                            <div className={styles.aiSection}>
+                              <div className={styles.aiSectionLabel}>Risks &amp; gaps</div>
+                              <div className={styles.aiSectionText} style={{whiteSpace:'pre-line'}}>{aiAnalysis.risks}</div>
                             </div>
                           )}
                         </div>
-                      ))
+                      ) : (
+                        <div className={styles.aiUnavailable}>
+                          <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" style={{color:'var(--text-tertiary)',opacity:.5}}>
+                            <path d="M8 0a8 8 0 100 16A8 8 0 008 0zM1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0zm9.78-2.22a.75.75 0 00-1.06-1.06L7.25 6.69 5.78 5.22a.75.75 0 00-1.06 1.06l1.47 1.47-1.47 1.47a.75.75 0 101.06 1.06L7.25 9.31l1.97 1.97a.75.75 0 101.06-1.06L8.31 8.25l1.97-1.97z"/>
+                          </svg>
+                          <p>AI service unavailable</p>
+                          <span>Start the agent service to enable analysis</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Saved insights */}
+                    {savedInsights.length > 0 && (
+                      <div className={styles.insightsCard}>
+                        <div className={styles.aiCardHeader}>
+                          <div className={styles.aiCardTitle}>
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style={{color:'var(--warning)'}}>
+                              <path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/>
+                            </svg>
+                            <span>Top Saved Answers</span>
+                          </div>
+                          <span className={styles.insightCount}>{savedInsights.length}</span>
+                        </div>
+                        <div className={styles.insightsList}>
+                          {savedInsights.map((ins) => (
+                            <div key={ins.id} className={styles.insightItem}>
+                              <div className={styles.insightQuestion}>{ins.question}</div>
+                              <div className={styles.insightAnswer}>{ins.answer}</div>
+                              <div className={styles.insightFooter}>
+                                <span className={styles.insightBy}>{ins.askedBy}</span>
+                                <button className={styles.likeBtn} onClick={() => handleLikeInsight(ins.id)}>
+                                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                                  {ins.likes}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
-                  </div>
-                ) : (
-                  <p className={styles.empty}>Diff not available for this commit</p>
-                )}
+
+                    {/* Chat */}
+                    <div className={styles.chatCard}>
+                      <div className={styles.aiCardHeader}>
+                        <div className={styles.aiCardTitle}>
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style={{color:'var(--text-secondary)'}}>
+                            <path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0113.25 12H9.06l-2.573 2.573A1.457 1.457 0 014 13.543V12H2.75A1.75 1.75 0 011 10.25Zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 01.75.75v2.19l2.72-2.72a.749.749 0 01.53-.22h4.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25H2.75z"/>
+                          </svg>
+                          <span>Ask the AI</span>
+                        </div>
+                      </div>
+
+                      {/* Suggestion chips */}
+                      <div className={styles.chipRow}>
+                        {['Why was this done?', 'Any missing tests?', 'Is this safe?'].map((q) => (
+                          <button key={q} className={styles.chip} onClick={() => setChatInput(q)}>{q}</button>
+                        ))}
+                      </div>
+
+                      {/* Message thread */}
+                      <div className={styles.chatThread}>
+                        {chatHistory.length === 0 && !chatSending && (
+                          <div className={styles.chatEmpty}>
+                            <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor" style={{color:'var(--text-tertiary)',opacity:.35}}>
+                              <path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0113.25 12H9.06l-2.573 2.573A1.457 1.457 0 014 13.543V12H2.75A1.75 1.75 0 011 10.25Zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 01.75.75v2.19l2.72-2.72a.749.749 0 01.53-.22h4.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25H2.75z"/>
+                            </svg>
+                            <p>Ask anything about this commit</p>
+                          </div>
+                        )}
+                        {chatHistory.map((turn, i) => (
+                          <div key={i} className={turn.role === 'user' ? styles.msgUser : styles.msgAssistant}>
+                            {turn.role === 'assistant' && (
+                              <div className={styles.msgAvatar}>AI</div>
+                            )}
+                            <div className={styles.msgContent}>
+                              <div className={styles.msgBubble}>{turn.message}</div>
+                              {turn.role === 'assistant' && turn.question && (
+                                <button className={styles.saveBtn} onClick={() => handleSaveInsight(turn.question, turn.message)}>
+                                  <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M4.53 4.75A.75.75 0 015.28 4h5.44a.75.75 0 010 1.5H8.75v5.19l1.72-1.72a.75.75 0 111.06 1.06l-3 3a.75.75 0 01-1.06 0l-3-3a.75.75 0 111.06-1.06l1.72 1.72V5.5H5.28a.75.75 0 01-.75-.75z"/></svg>
+                                  Save answer
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        {chatSending && (
+                          <div className={styles.msgAssistant}>
+                            <div className={styles.msgAvatar}>AI</div>
+                            <div className={styles.msgContent}>
+                              <div className={`${styles.msgBubble} ${styles.msgTyping}`}>
+                                <span /><span /><span />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Input */}
+                      <div className={styles.chatBar}>
+                        <input
+                          className={styles.chatBarInput}
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChat()}
+                          placeholder="Ask about this commit..."
+                          disabled={chatSending}
+                          autoComplete="off"
+                        />
+                        <button
+                          className={styles.chatBarSend}
+                          onClick={handleSendChat}
+                          disabled={chatSending || !chatInput.trim()}
+                          aria-label="Send"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8.75 1.75a.75.75 0 00-1.5 0v5.69L5.03 5.22a.75.75 0 00-1.06 1.06l3.5 3.5a.75.75 0 001.06 0l3.5-3.5a.75.75 0 00-1.06-1.06L8.75 7.44V1.75z" transform="rotate(180,8,8)"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>{/* end commitAiSide */}
+                </div>{/* end commitPanelBody */}
               </div>
             </div>
           )}

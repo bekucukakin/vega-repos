@@ -3,7 +3,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 1px;
-  /* İçerik kadar genişle; panel dar ise yatay kaydırma ile tam ad görünsün */
+  /* Grow to content width; if panel is narrow, horizontal scroll shows full name */
   width: max-content;
   min-width: 100%;
   box-sizing: border-box;
