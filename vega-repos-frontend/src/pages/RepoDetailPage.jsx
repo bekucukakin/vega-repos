@@ -6,6 +6,17 @@ import CodeViewer from '../components/CodeViewer'
 import styles from './RepoDetailPage.module.css'
 
 const API_BASE = '/api'
+const AI_TIMEOUT_MS = 45000
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = AI_TIMEOUT_MS) {
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...options, signal: controller.signal })
+  } finally {
+    clearTimeout(id)
+  }
+}
 
 const BRANCH_COLORS = [
   '#0ea5e9',
@@ -239,6 +250,7 @@ export default function RepoDetailPage() {
   const [chatHistory, setChatHistory] = useState([])       // [{role,message}]
   const [chatInput, setChatInput] = useState('')
   const [chatSending, setChatSending] = useState(false)
+  const [chatError, setChatError] = useState('')
   const [savedInsights, setSavedInsights] = useState([])   // persisted Q&A from DB
   const [expandedDiffFiles, setExpandedDiffFiles] = useState({})
 
@@ -471,7 +483,7 @@ export default function RepoDetailPage() {
 
     // AI analysis (separate — can be slow)
     try {
-      const aiRes = await fetch('http://localhost:8084/api/agent/analyze-commit', {
+      const aiRes = await fetchWithTimeout('http://localhost:8084/api/agent/analyze-commit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({
@@ -485,7 +497,7 @@ export default function RepoDetailPage() {
         const data = await aiRes.json()
         if (data.success) setAiAnalysis(data)
       }
-    } catch { /* AI unavailable — panel stays empty */ } finally {
+    } catch { /* AI unavailable or timeout — panel stays empty */ } finally {
       setAiLoading(false)
     }
   }
@@ -495,6 +507,7 @@ export default function RepoDetailPage() {
     const question = chatInput.trim()
     setChatInput('')
     setChatSending(true)
+    setChatError('')
     const newHistory = [...chatHistory, { role: 'user', message: question }]
     setChatHistory(newHistory)
     try {
@@ -521,7 +534,7 @@ export default function RepoDetailPage() {
         'Changed file details:',
         diffSamples || '(diff unavailable)',
       ].filter(Boolean).join('\n')
-      const res = await fetch('http://localhost:8084/api/agent/commit-chat', {
+      const res = await fetchWithTimeout('http://localhost:8084/api/agent/commit-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ commitContext, question, history: newHistory }),
@@ -530,9 +543,18 @@ export default function RepoDetailPage() {
         const data = await res.json()
         if (data.success) {
           setChatHistory([...newHistory, { role: 'assistant', message: data.answer, question }])
+        } else {
+          setChatError(data.error || 'AI response could not be generated.')
         }
+      } else {
+        const data = await res.json().catch(() => null)
+        setChatError(data?.error || 'AI service returned an error.')
       }
-    } catch { /* silent */ } finally {
+    } catch (e) {
+      setChatError(e?.name === 'AbortError'
+        ? 'AI response timed out. Please try a shorter question or retry.'
+        : 'Could not reach AI service.')
+    } finally {
       setChatSending(false)
     }
   }
@@ -1358,6 +1380,7 @@ export default function RepoDetailPage() {
                       </div>
 
                       {/* Input */}
+                      {chatError && <p className={styles.error}>{chatError}</p>}
                       <div className={styles.chatBar}>
                         <input
                           className={styles.chatBarInput}

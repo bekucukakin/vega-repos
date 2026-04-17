@@ -4,6 +4,17 @@ import { useAuth } from '../context/AuthContext'
 import styles from './PullRequestDetailPage.module.css'
 
 const API_BASE = '/api'
+const AI_TIMEOUT_MS = 45000
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = AI_TIMEOUT_MS) {
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...options, signal: controller.signal })
+  } finally {
+    clearTimeout(id)
+  }
+}
 
 async function safeJson(r) {
   const text = await r.text()
@@ -184,7 +195,7 @@ export default function PullRequestDetailPage() {
     setAiError('')
     setAiAnalysis(null)
     try {
-      const r = await fetch(
+      const r = await fetchWithTimeout(
         `${API_BASE}/repos/${username}/${repoName}/pull-requests/${prId}/ai-analysis`,
         { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' } }
       )
@@ -196,7 +207,9 @@ export default function PullRequestDetailPage() {
         setAiError(data?.error || `AI service returned ${r.status}`)
       }
     } catch (e) {
-      setAiError(e?.message || 'Failed to reach AI service.')
+      setAiError(e?.name === 'AbortError'
+        ? 'AI analysis timed out. Please retry.'
+        : (e?.message || 'Failed to reach AI service.'))
     } finally {
       setAiLoading(false)
     }
@@ -246,7 +259,7 @@ export default function PullRequestDetailPage() {
     setChatMessages(prev => [...prev, { role: 'user', text: q }])
     setChatTyping(true)
     try {
-      const r = await fetch('http://localhost:8084/api/agent/pr-chat', {
+      const r = await fetchWithTimeout('http://localhost:8084/api/agent/pr-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prContext: buildPrContext(), question: q, history }),
@@ -257,8 +270,10 @@ export default function PullRequestDetailPage() {
       } else {
         setChatError(data?.error || 'AI service unavailable.')
       }
-    } catch {
-      setChatError('Could not reach AI service.')
+    } catch (e) {
+      setChatError(e?.name === 'AbortError'
+        ? 'AI response timed out. Please retry with a shorter question.'
+        : 'Could not reach AI service.')
     } finally {
       setChatTyping(false)
     }

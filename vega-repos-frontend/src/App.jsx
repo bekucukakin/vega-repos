@@ -9,8 +9,7 @@ import RepoDetailPage from './pages/RepoDetailPage'
 import PullRequestDetailPage from './pages/PullRequestDetailPage'
 import CreatePullRequestPage from './pages/CreatePullRequestPage'
 import CollaboratorRequestsPage from './pages/CollaboratorRequestsPage'
-import CommitMetricsPage from './pages/CommitMetricsPage'
-import PrMetricsPage from './pages/PrMetricsPage'
+import VegaAnalyticsDashboard from './pages/VegaAnalyticsDashboard'
 import VegaDocsPage from './pages/VegaDocsPage'
 import ProfilePage from './pages/ProfilePage'
 import PeoplePage from './pages/PeoplePage'
@@ -67,22 +66,14 @@ function App() {
             }
           />
           <Route
-            path="metrics/commits"
+            path="metrics/analytics"
             element={
               <PrivateRoute>
-                <CommitMetricsPage />
+                <VegaAnalyticsDashboard />
               </PrivateRoute>
             }
           />
-          <Route
-            path="metrics/pr-reviews"
-            element={
-              <PrivateRoute>
-                <PrMetricsPage />
-              </PrivateRoute>
-            }
-          />
-          <Route path="metrics" element={<Navigate to="/metrics/commits" replace />} />
+          <Route path="metrics" element={<Navigate to="/metrics/analytics" replace />} />
           <Route path="profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
           <Route
             path="people/:username"
