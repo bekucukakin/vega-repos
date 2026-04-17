@@ -234,7 +234,7 @@ public class RepoController {
         }
         PrDto pr = repoService.getPullRequest(username, repoName, prId);
         if (pr == null) return ResponseEntity.notFound().build();
-        CommitDiffDto diff = repoService.getPrDiff(username, repoName, pr.getSourceBranch(), pr.getTargetBranch());
+        CommitDiffDto diff = repoService.getPrDiffSnapshot(username, repoName, pr);
         if (diff == null) return ResponseEntity.ok(CommitDiffDto.builder().files(List.of()).build());
         return ResponseEntity.ok(diff);
     }

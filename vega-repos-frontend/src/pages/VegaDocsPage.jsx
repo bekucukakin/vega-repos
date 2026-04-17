@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/github-dark-dimmed.min.css'
 import styles from './VegaDocsPage.module.css'
 
 const API_BASE = '/api'
@@ -280,6 +282,16 @@ export default function VegaDocsPage() {
   useEffect(() => {
     if (!content || !contentRef.current) return
     const el = contentRef.current
+
+    el.querySelectorAll('pre code.hljs').forEach((code) => {
+      if (code.dataset.hljsApplied) return
+      code.dataset.hljsApplied = 'true'
+      try {
+        hljs.highlightElement(code)
+      } catch {
+        /* unknown or empty language */
+      }
+    })
 
     const preBlocks = el.querySelectorAll('.asciidoc-enhanced-done pre, pre')
     el.querySelectorAll('pre').forEach((pre) => {

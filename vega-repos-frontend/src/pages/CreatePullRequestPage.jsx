@@ -95,7 +95,9 @@ export default function CreatePullRequestPage() {
       })
       const data = await safeJson(r)
       if (r.ok && data?.id) {
-        navigate(`/repos/${username}/${repoName}/pull-requests/${data.id}`)
+        navigate(`/repos/${username}/${repoName}/pull-requests/${data.id}`, {
+          state: { hasConflicts: !!data.hasConflicts, conflictedFiles: data.conflictedFiles ?? [] }
+        })
       } else {
         throw new Error(data?.error || `Server returned ${r.status}`)
       }

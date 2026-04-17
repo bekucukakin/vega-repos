@@ -532,6 +532,16 @@ public class RepoService {
         return null;
     }
 
+    private List<String> getParentHashesFromCommit(String username, String repoName, String commitHash) {
+        String content = readCommitObject(username, repoName, commitHash);
+        if (content == null) return List.of();
+        List<String> parents = new ArrayList<>();
+        for (String line : content.split("\\r?\\n")) {
+            if (line.startsWith("parent ")) parents.add(line.substring(7).trim());
+        }
+        return parents;
+    }
+
     /** Get commit diff (changed files). commitHash can be short (12 chars) or full. */
     public CommitDiffDto getCommitDiff(String username, String repoName, String commitHash) {
         String fullHash = resolveToFullHash(username, repoName, commitHash);
@@ -556,9 +566,11 @@ public class RepoService {
             String parentBlob = parentBlobs.get(path);
             String currentBlob = currentBlobs.get(path);
             if (parentBlob == null && currentBlob != null) {
-                files.add(CommitDiffDto.FileDiffDto.builder().path(path).status("added").build());
+                String diff = buildUnifiedDiff(username, repoName, null, currentBlob, path);
+                files.add(CommitDiffDto.FileDiffDto.builder().path(path).status("added").unifiedDiff(diff).build());
             } else if (parentBlob != null && currentBlob == null) {
-                files.add(CommitDiffDto.FileDiffDto.builder().path(path).status("deleted").build());
+                String diff = buildUnifiedDiff(username, repoName, parentBlob, null, path);
+                files.add(CommitDiffDto.FileDiffDto.builder().path(path).status("deleted").unifiedDiff(diff).build());
             } else if (parentBlob != null && currentBlob != null && !parentBlob.equals(currentBlob)) {
                 String diff = buildUnifiedDiff(username, repoName, parentBlob, currentBlob, path);
                 files.add(CommitDiffDto.FileDiffDto.builder().path(path).status("modified").unifiedDiff(diff).build());
@@ -1106,9 +1118,11 @@ public class RepoService {
             String targetBlob = targetBlobs.get(path);
             String sourceBlob = sourceBlobs.get(path);
             if (targetBlob == null && sourceBlob != null) {
-                files.add(CommitDiffDto.FileDiffDto.builder().path(path).status("added").build());
+                String diff = buildUnifiedDiff(username, repoName, null, sourceBlob, path);
+                files.add(CommitDiffDto.FileDiffDto.builder().path(path).status("added").unifiedDiff(diff).build());
             } else if (targetBlob != null && sourceBlob == null) {
-                files.add(CommitDiffDto.FileDiffDto.builder().path(path).status("deleted").build());
+                String diff = buildUnifiedDiff(username, repoName, targetBlob, null, path);
+                files.add(CommitDiffDto.FileDiffDto.builder().path(path).status("deleted").unifiedDiff(diff).build());
             } else if (targetBlob != null && sourceBlob != null && !targetBlob.equals(sourceBlob)) {
                 String diff = buildUnifiedDiff(username, repoName, targetBlob, sourceBlob, path);
                 files.add(CommitDiffDto.FileDiffDto.builder().path(path).status("modified").unifiedDiff(diff).build());
@@ -1118,6 +1132,113 @@ public class RepoService {
         return CommitDiffDto.builder()
                 .commitHash(null)
                 .message(sourceBranch + " → " + targetBranch)
+                .author(null)
+                .timestamp(null)
+                .files(files)
+                .build();
+    }
+
+    /**
+     * Stable PR diff snapshot.
+     * Uses the PR commit list when available so the Changes tab does not drift after branch heads move.
+     */
+    public CommitDiffDto getPrDiffSnapshot(String username, String repoName, PrDto pr) {
+        if (pr == null) return null;
+        List<String> commits = pr.getCommitHashes();
+        if (commits != null && !commits.isEmpty()) {
+            CommitDiffDto fromCommits = buildDiffFromCommitList(username, repoName, commits,
+                    pr.getSourceBranch() + " → " + pr.getTargetBranch());
+            if (fromCommits != null && fromCommits.getFiles() != null && !fromCommits.getFiles().isEmpty()) {
+                return fromCommits;
+            }
+
+            String sourceTip = commits.get(commits.size() - 1);
+            String firstCommit = commits.get(0);
+            String baseCommit = getParentHashFromCommit(username, repoName, firstCommit);
+            if (baseCommit == null || baseCommit.isBlank()) {
+                baseCommit = getCommitHashForBranch(username, repoName, pr.getTargetBranch());
+            }
+            CommitDiffDto diff = buildDiffBetweenCommits(
+                    username, repoName, baseCommit, sourceTip,
+                    pr.getSourceBranch() + " → " + pr.getTargetBranch()
+            );
+            if (diff != null) return diff;
+        }
+        // Fallback to live branch diff for older PRs without commit list.
+        return getPrDiff(username, repoName, pr.getSourceBranch(), pr.getTargetBranch());
+    }
+
+    private CommitDiffDto buildDiffFromCommitList(String username, String repoName, List<String> commits, String message) {
+        if (commits == null || commits.isEmpty()) return null;
+        Map<String, CommitDiffDto.FileDiffDto> merged = new LinkedHashMap<>();
+        String lastCommit = null;
+        for (String c : commits) {
+            if (c == null || c.isBlank()) continue;
+            CommitDiffDto cd = getCommitDiff(username, repoName, c);
+            if (cd == null || cd.getFiles() == null) continue;
+            lastCommit = c;
+            for (CommitDiffDto.FileDiffDto f : cd.getFiles()) {
+                if (f == null || f.getPath() == null) continue;
+                CommitDiffDto.FileDiffDto prev = merged.get(f.getPath());
+                if (prev == null) {
+                    merged.put(f.getPath(), CommitDiffDto.FileDiffDto.builder()
+                            .path(f.getPath())
+                            .status(f.getStatus())
+                            .unifiedDiff(f.getUnifiedDiff())
+                            .build());
+                } else {
+                    prev.setStatus(f.getStatus());
+                    if (f.getUnifiedDiff() != null && !f.getUnifiedDiff().isBlank()) {
+                        prev.setUnifiedDiff(f.getUnifiedDiff());
+                    }
+                }
+            }
+        }
+        if (merged.isEmpty()) return null;
+        List<CommitDiffDto.FileDiffDto> files = new ArrayList<>(merged.values());
+        files.sort(Comparator.comparing(CommitDiffDto.FileDiffDto::getPath));
+        return CommitDiffDto.builder()
+                .commitHash(lastCommit)
+                .message(message)
+                .author(null)
+                .timestamp(null)
+                .files(files)
+                .build();
+    }
+
+    private CommitDiffDto buildDiffBetweenCommits(String username, String repoName, String oldCommit, String newCommit, String message) {
+        if (oldCommit == null || oldCommit.isBlank() || newCommit == null || newCommit.isBlank()) return null;
+        String newTree = getTreeHashFromCommit(username, repoName, newCommit);
+        String oldTree = getTreeHashFromCommit(username, repoName, oldCommit);
+        if (newTree == null || oldTree == null) return null;
+
+        Map<String, String> oldBlobs = new HashMap<>();
+        collectBlobsFromTree(username, repoName, oldTree, "", oldBlobs);
+        Map<String, String> newBlobs = new HashMap<>();
+        collectBlobsFromTree(username, repoName, newTree, "", newBlobs);
+
+        List<CommitDiffDto.FileDiffDto> files = new ArrayList<>();
+        Set<String> allPaths = new HashSet<>();
+        allPaths.addAll(oldBlobs.keySet());
+        allPaths.addAll(newBlobs.keySet());
+        for (String path : allPaths) {
+            String oldBlob = oldBlobs.get(path);
+            String newBlob = newBlobs.get(path);
+            if (oldBlob == null && newBlob != null) {
+                String diff = buildUnifiedDiff(username, repoName, null, newBlob, path);
+                files.add(CommitDiffDto.FileDiffDto.builder().path(path).status("added").unifiedDiff(diff).build());
+            } else if (oldBlob != null && newBlob == null) {
+                String diff = buildUnifiedDiff(username, repoName, oldBlob, null, path);
+                files.add(CommitDiffDto.FileDiffDto.builder().path(path).status("deleted").unifiedDiff(diff).build());
+            } else if (oldBlob != null && newBlob != null && !oldBlob.equals(newBlob)) {
+                String diff = buildUnifiedDiff(username, repoName, oldBlob, newBlob, path);
+                files.add(CommitDiffDto.FileDiffDto.builder().path(path).status("modified").unifiedDiff(diff).build());
+            }
+        }
+        files.sort(Comparator.comparing(CommitDiffDto.FileDiffDto::getPath));
+        return CommitDiffDto.builder()
+                .commitHash(newCommit)
+                .message(message)
                 .author(null)
                 .timestamp(null)
                 .files(files)
@@ -1420,7 +1541,7 @@ public class RepoService {
                 .build();
     }
 
-    /** Find common ancestor commit of two commits using BFS. */
+    /** Find common ancestor commit of two commits using BFS (handles merge commits with multiple parents). */
     private String findCommonAncestor(String username, String repoName, String commit1, String commit2) {
         Set<String> ancestors1 = new LinkedHashSet<>();
         java.util.Deque<String> q1 = new java.util.ArrayDeque<>();
@@ -1429,16 +1550,18 @@ public class RepoService {
             String c = q1.poll();
             if (c == null || ancestors1.contains(c)) continue;
             ancestors1.add(c);
-            String p = getParentHashFromCommit(username, repoName, c);
-            if (p != null) q1.add(p);
+            for (String p : getParentHashesFromCommit(username, repoName, c)) q1.add(p);
         }
-        // Walk commit2 chain, return first found in ancestors1
-        String current = commit2;
+        // BFS from commit2, return first commit found in ancestors1
+        java.util.Deque<String> q2 = new java.util.ArrayDeque<>();
+        q2.add(commit2);
         Set<String> visited = new HashSet<>();
-        while (current != null && !visited.contains(current)) {
-            if (ancestors1.contains(current)) return current;
-            visited.add(current);
-            current = getParentHashFromCommit(username, repoName, current);
+        while (!q2.isEmpty()) {
+            String c = q2.poll();
+            if (c == null || visited.contains(c)) continue;
+            if (ancestors1.contains(c)) return c;
+            visited.add(c);
+            for (String p : getParentHashesFromCommit(username, repoName, c)) q2.add(p);
         }
         return null;
     }
@@ -1454,8 +1577,7 @@ public class RepoService {
             String c = tq.poll();
             if (c == null || targetAncestors.contains(c)) continue;
             targetAncestors.add(c);
-            String p = getParentHashFromCommit(username, repoName, c);
-            if (p != null) tq.add(p);
+            for (String p : getParentHashesFromCommit(username, repoName, c)) tq.add(p);
         }
         // Walk source, collect commits not in target
         List<String> result = new ArrayList<>();
@@ -1467,8 +1589,7 @@ public class RepoService {
             if (c == null || visited.contains(c) || targetAncestors.contains(c)) continue;
             visited.add(c);
             result.add(c);
-            String p = getParentHashFromCommit(username, repoName, c);
-            if (p != null) sq.add(p);
+            for (String p : getParentHashesFromCommit(username, repoName, c)) sq.add(p);
         }
         return result;
     }
@@ -2087,8 +2208,17 @@ public class RepoService {
                 Map<String, String> sourceBlobs = new HashMap<>();
                 collectBlobsFromTree(username, repoName, sourceTree, "", sourceBlobs);
 
-                Map<String, String> mergedBlobs = mergeBlobMaps(targetBlobs, sourceBlobs);
-                if (mergedBlobs == null) return "Merge conflict: same file modified in both branches. Resolve via VEGA CLI.";
+                // 3-way merge using common ancestor to avoid false conflict on files only one branch touched
+                String ancestorCommit = findCommonAncestor(username, repoName, targetCommit, sourceCommit);
+                Map<String, String> ancestorBlobs = new HashMap<>();
+                if (ancestorCommit != null) {
+                    String ancestorTree = getTreeHashFromCommit(username, repoName, ancestorCommit);
+                    if (ancestorTree != null) {
+                        collectBlobsFromTree(username, repoName, ancestorTree, "", ancestorBlobs);
+                    }
+                }
+                Map<String, String> mergedBlobs = mergeThreeWayBlobMaps(targetBlobs, sourceBlobs, ancestorBlobs);
+                if (mergedBlobs == null) return "Cannot merge: this PR has unresolved conflicts. Resolve them locally and update your branch before merging.";
 
                 String mergeTreeHash = writeTreeFromBlobMap(username, repoName, mergedBlobs, "");
                 if (mergeTreeHash == null) return "Failed to create merge tree";
@@ -2115,6 +2245,47 @@ public class RepoService {
             log.error("Failed to merge PR {}: {}", prId, e.getMessage());
             return "Merge failed: " + e.getMessage();
         }
+    }
+
+    /**
+     * 3-way merge of path→blob maps using common ancestor.
+     * A true conflict only exists when BOTH branches independently changed the same file differently.
+     * Returns null only for true conflicts; auto-resolves single-side changes.
+     */
+    private Map<String, String> mergeThreeWayBlobMaps(
+            Map<String, String> target, Map<String, String> source, Map<String, String> ancestor) {
+        Set<String> allPaths = new HashSet<>();
+        allPaths.addAll(target.keySet());
+        allPaths.addAll(source.keySet());
+        if (ancestor != null) allPaths.addAll(ancestor.keySet());
+        Map<String, String> merged = new HashMap<>();
+        for (String path : allPaths) {
+            String t = target.get(path);
+            String s = source.get(path);
+            String a = ancestor != null ? ancestor.get(path) : null;
+            boolean sourceChanged = !Objects.equals(s, a);
+            boolean targetChanged = !Objects.equals(t, a);
+            if (!sourceChanged && !targetChanged) {
+                // Neither branch changed this file — keep current
+                if (t != null) merged.put(path, t);
+            } else if (sourceChanged && !targetChanged) {
+                // Only source changed — accept source (null = deleted by source)
+                if (s != null) merged.put(path, s);
+            } else if (!sourceChanged && targetChanged) {
+                // Only target changed — accept target (null = deleted by target)
+                if (t != null) merged.put(path, t);
+            } else {
+                // Both changed
+                if (Objects.equals(s, t)) {
+                    // Identical outcome in both branches — accept either
+                    if (t != null) merged.put(path, t);
+                } else {
+                    // True conflict: both branches changed the same file differently
+                    return null;
+                }
+            }
+        }
+        return merged;
     }
 
     /** Merge two path->blob maps. Returns null if conflict (same path, different hash). */

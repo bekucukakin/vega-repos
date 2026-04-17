@@ -240,6 +240,7 @@ export default function RepoDetailPage() {
   const [chatInput, setChatInput] = useState('')
   const [chatSending, setChatSending] = useState(false)
   const [savedInsights, setSavedInsights] = useState([])   // persisted Q&A from DB
+  const [expandedDiffFiles, setExpandedDiffFiles] = useState({})
 
   const loadRepoData = useCallback(async () => {
     setAccessDenied(false)
@@ -443,6 +444,7 @@ export default function RepoDetailPage() {
     setChatHistory([])
     setChatInput('')
     setSavedInsights([])
+    setExpandedDiffFiles({})
 
     const hashForDiff = c.fullHash || c.hash
 
@@ -453,7 +455,11 @@ export default function RepoDetailPage() {
     ])
 
     if (diffRes.status === 'fulfilled' && diffRes.value.ok) {
-      setCommitDiff(await diffRes.value.json())
+      const diffData = await diffRes.value.json()
+      setCommitDiff(diffData)
+      const openByDefault = {}
+      ;(diffData?.files || []).forEach((f) => { openByDefault[f.path] = f.status === 'added' })
+      setExpandedDiffFiles(openByDefault)
     } else {
       setCommitDiff(null)
     }
@@ -493,11 +499,32 @@ export default function RepoDetailPage() {
     setChatHistory(newHistory)
     try {
       const c = selectedCommit
-      const commitContext = `Commit: ${c.fullHash || c.hash}\nMessage: ${c.message}\nAuthor: ${c.author}`
+      const files = (commitDiff?.files || [])
+      const changedFiles = files.length
+      const added = files.filter((f) => f.status === 'added').length
+      const modified = files.filter((f) => f.status === 'modified').length
+      const deleted = files.filter((f) => f.status === 'deleted').length
+      const diffSamples = files.slice(0, 8).map((f) => {
+        const raw = f.unifiedDiff && f.unifiedDiff !== '(binary file changed)'
+          ? f.unifiedDiff.split('\n').slice(0, 80).join('\n')
+          : (f.unifiedDiff || '(no text diff)')
+        return `File: ${f.path}\nStatus: ${f.status}\n${raw}`
+      }).join('\n\n---\n\n')
+      const commitContext = [
+        `Commit: ${c.fullHash || c.hash}`,
+        `Message: ${c.message || '(no message)'}`,
+        `Author: ${c.author || ''}`,
+        `Metrics: files=${changedFiles}, added=${added}, modified=${modified}, deleted=${deleted}`,
+        aiAnalysis?.riskLevel ? `AI risk level: ${aiAnalysis.riskLevel}` : '',
+        aiAnalysis?.summary ? `AI summary: ${aiAnalysis.summary}` : '',
+        savedInsights.length > 0 ? `Saved insights count: ${savedInsights.length}` : '',
+        'Changed file details:',
+        diffSamples || '(diff unavailable)',
+      ].filter(Boolean).join('\n')
       const res = await fetch('http://localhost:8084/api/agent/commit-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ commitContext, question, history: chatHistory }),
+        body: JSON.stringify({ commitContext, question, history: newHistory }),
       })
       if (res.ok) {
         const data = await res.json()
@@ -508,6 +535,10 @@ export default function RepoDetailPage() {
     } catch { /* silent */ } finally {
       setChatSending(false)
     }
+  }
+
+  const toggleDiffFile = (path) => {
+    setExpandedDiffFiles((prev) => ({ ...prev, [path]: !prev[path] }))
   }
 
   const handleSaveInsight = async (question, answer) => {
@@ -686,18 +717,20 @@ export default function RepoDetailPage() {
           <div className={styles.explorer}>
             <div className={styles.fileTreePanel}>
               <h3 className={styles.panelTitle}>File Explorer</h3>
-              {fileTreeLoading ? (
-                <div className={styles.fileLoading}>
-                  <span className={styles.spinner} />
-                  Loading files...
-                </div>
-              ) : (
-                <FileTree
-                  nodes={fileTree}
-                  onSelectFile={handleSelectFile}
-                  selectedPath={selectedFile}
-                />
-              )}
+              <div className={styles.fileTreeContent}>
+                {fileTreeLoading ? (
+                  <div className={styles.fileLoading}>
+                    <span className={styles.spinner} />
+                    Loading files...
+                  </div>
+                ) : (
+                  <FileTree
+                    nodes={fileTree}
+                    onSelectFile={handleSelectFile}
+                    selectedPath={selectedFile}
+                  />
+                )}
+              </div>
             </div>
             <div className={styles.contentPanel}>
               {fileLoading ? (
@@ -1124,7 +1157,18 @@ export default function RepoDetailPage() {
                       <div className={styles.diffBody}>
                         {commitDiff.files.map((f) => (
                           <div key={f.path} className={styles.diffFile}>
-                            <div className={styles.diffFileHeader}>
+                            <div
+                              className={styles.diffFileHeader}
+                              onClick={() => toggleDiffFile(f.path)}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault()
+                                  toggleDiffFile(f.path)
+                                }
+                              }}
+                            >
                               <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style={{color:'var(--text-tertiary)',flexShrink:0}}>
                                 <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0113.25 16h-9.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 019 4.25V1.5H3.75zm6.75.896V4.25c0 .138.112.25.25.25h1.854L10.5 2.396z"/>
                               </svg>
@@ -1132,8 +1176,9 @@ export default function RepoDetailPage() {
                               <span className={`${styles.diffStatus} ${f.status === 'added' ? styles.diffAdded : f.status === 'deleted' ? styles.diffDeleted : styles.diffModified}`}>
                                 {f.status}
                               </span>
+                              <span className={styles.diffToggleHint}>{expandedDiffFiles[f.path] ? 'Hide content' : 'Show content'}</span>
                             </div>
-                            {f.unifiedDiff && f.unifiedDiff !== '(binary file changed)' ? (
+                            {expandedDiffFiles[f.path] && f.unifiedDiff && f.unifiedDiff !== '(binary file changed)' ? (
                               <div className={styles.diffContent}>
                                 {f.unifiedDiff.split('\n').map((line, i) => (
                                   <div key={i} className={
@@ -1145,7 +1190,7 @@ export default function RepoDetailPage() {
                                   }>{line || ' '}</div>
                                 ))}
                               </div>
-                            ) : f.unifiedDiff === '(binary file changed)' ? (
+                            ) : expandedDiffFiles[f.path] && f.unifiedDiff === '(binary file changed)' ? (
                               <div className={styles.diffBinary}>Binary file — diff not available</div>
                             ) : null}
                           </div>

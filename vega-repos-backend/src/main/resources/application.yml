@@ -29,8 +29,9 @@ vega:
     url: ${VEGA_PULL_SERVICE_URL:http://localhost:8083}
   agent-service:
     url: ${VEGA_AGENT_SERVICE_URL:http://localhost:8084}
+  # Monorepo layout: vega-system/vegadocs from cwd vega-repos/vega-repos-backend → ../../vegadocs
   docs:
-    path: ${VEGA_DOCS_PATH:../../../../vegadocs}
+    path: ${VEGA_DOCS_PATH:../../vegadocs}
 
 # Hadoop HDFS configuration
 hdfs:

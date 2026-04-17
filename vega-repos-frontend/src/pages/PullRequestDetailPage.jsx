@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useParams, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import styles from './PullRequestDetailPage.module.css'
 
@@ -94,6 +94,7 @@ function formatDate(ts) {
 export default function PullRequestDetailPage() {
   const { username, repoName, prId } = useParams()
   const { token } = useAuth()
+  const location = useLocation()
   const [pr, setPr] = useState(null)
   const [diff, setDiff] = useState(null)
   const [canCreatePr, setCanCreatePr] = useState(false)
@@ -108,6 +109,12 @@ export default function PullRequestDetailPage() {
   const [aiAnalysis, setAiAnalysis] = useState(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState('')
+  const [chatMessages, setChatMessages] = useState([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatTyping, setChatTyping] = useState(false)
+  const [chatError, setChatError] = useState('')
+  const [expandedDiffFiles, setExpandedDiffFiles] = useState({})
+  const chatBottomRef = useRef(null)
 
   const headers = useMemo(() => (token ? { Authorization: `Bearer ${token}` } : {}), [token])
 
@@ -195,6 +202,76 @@ export default function PullRequestDetailPage() {
     }
   }
 
+  const buildPrContext = useCallback(() => {
+    if (!pr) return ''
+    const diffFiles = diff?.files || []
+    const changedFiles = diffFiles.length
+    const added = diffFiles.filter((f) => f.status === 'added').length
+    const modified = diffFiles.filter((f) => f.status === 'modified').length
+    const deleted = diffFiles.filter((f) => f.status === 'deleted').length
+    const fileDetails = diffFiles.slice(0, 10).map((f) => {
+      const raw = f.unifiedDiff && f.unifiedDiff !== '(binary file changed)'
+        ? f.unifiedDiff.split('\n').slice(0, 80).join('\n')
+        : (f.unifiedDiff || '(no text diff)')
+      return `File: ${f.path}\nStatus: ${f.status}\n${raw}`
+    }).join('\n\n---\n\n')
+    const lines = [
+      `PR: ${pr.description || `PR #${prId.replace('PR-', '')}`}`,
+      `Branch: ${pr.sourceBranch} → ${pr.targetBranch}`,
+      `Author: ${pr.author}`,
+      `Status: ${pr.status}`,
+      pr.prType ? `Type: ${pr.prType.replace(/_/g, ' ')}` : '',
+      pr.riskLevel ? `Risk: ${pr.riskLevel} (score: ${pr.riskScore ?? '?'})` : '',
+      pr.summaryFilesChanged != null ? `Files changed: ${pr.summaryFilesChanged}, +${pr.summaryLinesAdded ?? 0}/-${pr.summaryLinesRemoved ?? 0}` : '',
+      `Diff metrics: files=${changedFiles}, added=${added}, modified=${modified}, deleted=${deleted}`,
+      pr.hasConflicts ? `CONFLICTS: ${(pr.conflictedFiles ?? []).join(', ')}` : 'No merge conflicts',
+      pr.riskReasons && pr.riskReasons.length > 0 ? `Risk reasons: ${pr.riskReasons.slice(0, 3).join('; ')}` : '',
+      aiAnalysis?.riskSummary ? `AI risk summary: ${aiAnalysis.riskSummary}` : '',
+      aiAnalysis?.explanation ? `AI explanation: ${aiAnalysis.explanation}` : '',
+      'Changed file details:',
+      fileDetails || '(diff unavailable)',
+    ]
+    return lines.filter(Boolean).join('\n')
+  }, [pr, prId, diff, aiAnalysis])
+
+  const sendChatMessage = useCallback(async (question) => {
+    const q = (question ?? chatInput).trim()
+    if (!q) return
+    setChatInput('')
+    setChatError('')
+    const history = [
+      ...chatMessages.map(m => ({ role: m.role, message: m.text })),
+      { role: 'user', message: q },
+    ]
+    setChatMessages(prev => [...prev, { role: 'user', text: q }])
+    setChatTyping(true)
+    try {
+      const r = await fetch('http://localhost:8084/api/agent/pr-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prContext: buildPrContext(), question: q, history }),
+      })
+      const data = await r.json().catch(() => null)
+      if (r.ok && data?.success !== false) {
+        setChatMessages(prev => [...prev, { role: 'assistant', text: data?.answer || 'No response.' }])
+      } else {
+        setChatError(data?.error || 'AI service unavailable.')
+      }
+    } catch {
+      setChatError('Could not reach AI service.')
+    } finally {
+      setChatTyping(false)
+    }
+  }, [chatInput, chatMessages, buildPrContext])
+
+  const toggleDiffFile = useCallback((path) => {
+    setExpandedDiffFiles((prev) => ({ ...prev, [path]: !prev[path] }))
+  }, [])
+
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages, chatTyping])
+
   if (loading || !pr) {
     return (
       <div className={styles.container}>
@@ -206,6 +283,7 @@ export default function PullRequestDetailPage() {
 
   const fileCount = diff?.files?.length || 0
   const isTerminal = pr.status === 'MERGED' || pr.status === 'REJECTED'
+  const justCreatedWithConflicts = location.state?.hasConflicts === true
 
   return (
     <div className={styles.container}>
@@ -243,14 +321,30 @@ export default function PullRequestDetailPage() {
                 <div>
                   <strong>Merge Conflicts Detected</strong>
                   <p className={styles.conflictNote}>
-                    This PR has conflicts between <code>{pr.sourceBranch}</code> and <code>{pr.targetBranch}</code>.
-                    Resolve via VEGA CLI before merging.
+                    <code>{pr.sourceBranch}</code> and <code>{pr.targetBranch}</code> have conflicting changes.
+                    This PR cannot be approved or merged until conflicts are resolved.
                   </p>
                   {pr.conflictedFiles && pr.conflictedFiles.length > 0 && (
                     <ul className={styles.conflictFiles}>
                       {pr.conflictedFiles.map((f, i) => <li key={i}><code>{f}</code></li>)}
                     </ul>
                   )}
+                  <p className={styles.conflictNote} style={{marginTop:'8px', fontStyle:'italic'}}>
+                    To fix: resolve conflicts locally on <code>{pr.sourceBranch}</code>, commit the resolution,
+                    then push. The conflict status here updates automatically. You may also close this PR
+                    and open a new one after resolving.
+                  </p>
+                </div>
+              </div>
+            )}
+            {justCreatedWithConflicts && !pr.hasConflicts && (
+              <div className={styles.conflictWarning} style={{borderColor:'var(--warning)', background:'rgba(234,179,8,0.06)'}}>
+                <span className={styles.conflictIcon} style={{color:'var(--warning)'}}>ℹ</span>
+                <div>
+                  <strong style={{color:'var(--warning)'}}>Conflicts Detected at Creation</strong>
+                  <p className={styles.conflictNote}>
+                    Conflicts were present when this PR was created. They appear resolved now — verify before merging.
+                  </p>
                 </div>
               </div>
             )}
@@ -370,13 +464,25 @@ export default function PullRequestDetailPage() {
               ) : (
                 diff?.files?.map((f) => (
                   <div key={f.path} className={styles.diffFile}>
-                    <div className={styles.diffFileHeader}>
+                    <div
+                      className={styles.diffFileHeader}
+                      onClick={() => toggleDiffFile(f.path)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          toggleDiffFile(f.path)
+                        }
+                      }}
+                    >
                       <span className={styles.diffPath}>{f.path}</span>
                       <span className={`${styles.diffStatus} ${f.status === 'added' ? styles.diffAdded : f.status === 'deleted' ? styles.diffDeleted : styles.diffModified}`}>
                         {f.status}
                       </span>
+                      <span className={styles.diffToggleHint}>{expandedDiffFiles[f.path] ? 'Hide content' : 'Show content'}</span>
                     </div>
-                    {f.unifiedDiff && (
+                    {expandedDiffFiles[f.path] && f.unifiedDiff && (
                       <div className={styles.diffContent}>
                         {f.unifiedDiff.split('\n').map((line, i) => (
                           <div
@@ -833,6 +939,79 @@ export default function PullRequestDetailPage() {
                 <span>{formatDate(pr.reviewCompletedAt)}</span>
               </div>
             )}
+          </div>
+
+          {/* PR Chatbot */}
+          <div className={styles.chatPanel}>
+            <div className={styles.chatHeader}>
+              <div className={styles.chatHeaderLeft}>
+                <span className={styles.chatDot} />
+                <span className={styles.chatTitle}>PR Assistant</span>
+              </div>
+            </div>
+
+            <div className={styles.chatMessages}>
+              {chatMessages.length === 0 && !chatTyping && (
+                <p className={styles.chatEmpty}>
+                  Ask anything about this PR — risk, changes, conflicts, or how to proceed.
+                  Responds in your language.
+                </p>
+              )}
+              {chatMessages.map((msg, i) => (
+                <div key={i} className={`${styles.chatMsg} ${msg.role === 'user' ? styles.chatMsgUser : styles.chatMsgAssistant}`}>
+                  <div className={styles.chatBubble}>{msg.text}</div>
+                </div>
+              ))}
+              {chatTyping && (
+                <div className={`${styles.chatMsg} ${styles.chatMsgAssistant}`}>
+                  <div className={`${styles.chatBubble} ${styles.chatTyping}`}>
+                    <span className={styles.chatTypingDot} />
+                    <span className={styles.chatTypingDot} />
+                    <span className={styles.chatTypingDot} />
+                  </div>
+                </div>
+              )}
+              <div ref={chatBottomRef} />
+            </div>
+
+            {chatMessages.length === 0 && (
+              <div className={styles.chatSuggestions}>
+                {[
+                  'What does this PR do?',
+                  pr.hasConflicts ? 'How do I fix the conflicts?' : 'Is this safe to merge?',
+                  'What are the risks?',
+                ].map((chip) => (
+                  <button key={chip} type="button" className={styles.chatChip} onClick={() => sendChatMessage(chip)}>
+                    {chip}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {chatError && <p className={styles.chatError}>{chatError}</p>}
+
+            <div className={styles.chatInputRow}>
+              <textarea
+                className={styles.chatInput}
+                placeholder="Ask about this PR..."
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage() } }}
+                disabled={chatTyping}
+                rows={1}
+              />
+              <button
+                type="button"
+                className={styles.chatSendBtn}
+                onClick={() => sendChatMessage()}
+                disabled={chatTyping || !chatInput.trim()}
+                title="Send"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M1.724 1.053a.5.5 0 00-.714.545l1.403 4.85a.5.5 0 00.397.354l5.69.953c.268.045.268.432 0 .477l-5.69.953a.5.5 0 00-.397.354l-1.403 4.85a.5.5 0 00.714.545l13-6.5a.5.5 0 000-.894l-13-6.5z"/>
+                </svg>
+              </button>
+            </div>
           </div>
         </aside>
       </div>

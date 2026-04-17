@@ -107,6 +107,9 @@ public class DocsController {
     public ResponseEntity<String> getDoc(
             @PathVariable String slug,
             @RequestParam(value = "lang", defaultValue = DEFAULT_LANG) String lang) {
+        if (!VISIBLE_DOCS.contains(slug)) {
+            return ResponseEntity.notFound().build();
+        }
         Path docsDir = resolveDocsDir(lang);
         if (docsDir == null) {
             return ResponseEntity.notFound().build();
