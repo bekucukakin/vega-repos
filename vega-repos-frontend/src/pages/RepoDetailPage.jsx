@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import FileTree from '../components/FileTree'
@@ -247,6 +247,7 @@ export default function RepoDetailPage() {
   // ── AI Commit Panel state ─────────────────────────────────────────────
   const [aiAnalysis, setAiAnalysis] = useState(null)      // { summary, changes, risks, riskLevel }
   const [aiLoading, setAiLoading] = useState(false)
+  const aiRequestRef = useRef(null) // tracks which commit the in-flight AI request belongs to
   const [chatHistory, setChatHistory] = useState([])       // [{role,message}]
   const [chatInput, setChatInput] = useState('')
   const [chatSending, setChatSending] = useState(false)
@@ -451,6 +452,8 @@ export default function RepoDetailPage() {
     setSelectedCommit(c)
     setDiffLoading(true)
     setCommitDiff(null)
+    const thisHash = c.fullHash || c.hash
+    aiRequestRef.current = thisHash
     setAiAnalysis(null)
     setAiLoading(true)
     setChatHistory([])
@@ -466,12 +469,17 @@ export default function RepoDetailPage() {
       fetch(`${API_BASE}/repos/${username}/${repoName}/commits/${encodeURIComponent(hashForDiff)}/insights`, { headers }),
     ])
 
+    let diffTextForAI = ''
     if (diffRes.status === 'fulfilled' && diffRes.value.ok) {
       const diffData = await diffRes.value.json()
       setCommitDiff(diffData)
       const openByDefault = {}
       ;(diffData?.files || []).forEach((f) => { openByDefault[f.path] = f.status === 'added' })
       setExpandedDiffFiles(openByDefault)
+      // Build diff text while we have the raw data — used by AI call below
+      diffTextForAI = (diffData?.files || []).slice(0, 10).map((f) =>
+        `File: ${f.path}\nStatus: ${f.status}\n${(f.unifiedDiff || '').slice(0, 1500)}`
+      ).join('\n\n---\n\n')
     } else {
       setCommitDiff(null)
     }
@@ -482,7 +490,9 @@ export default function RepoDetailPage() {
     }
 
     // AI analysis (separate — can be slow)
+    // Guard: if user already clicked another commit, discard this stale request
     try {
+      if (aiRequestRef.current !== thisHash) return
       const aiRes = await fetchWithTimeout('http://localhost:8084/api/agent/analyze-commit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
@@ -490,15 +500,16 @@ export default function RepoDetailPage() {
           commitHash: hashForDiff,
           commitMessage: c.message,
           author: c.author,
-          diff: '',
+          diff: diffTextForAI,
         }),
       })
+      if (aiRequestRef.current !== thisHash) return
       if (aiRes.ok) {
         const data = await aiRes.json()
         if (data.success) setAiAnalysis(data)
       }
     } catch { /* AI unavailable or timeout — panel stays empty */ } finally {
-      setAiLoading(false)
+      if (aiRequestRef.current === thisHash) setAiLoading(false)
     }
   }
 

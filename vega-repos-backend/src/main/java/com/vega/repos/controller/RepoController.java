@@ -303,9 +303,9 @@ public class RepoController {
         if (!repoAccessService.canApprovePrInRepo(currentUser, username, repoName)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        // Cannot approve your own PR
+        // Cannot approve your own PR — unless you are the repo owner
         PrDto pr = repoService.getPullRequest(username, repoName, prId);
-        if (pr != null && currentUser.equals(pr.getAuthor())) {
+        if (pr != null && currentUser.equals(pr.getAuthor()) && !currentUser.equals(username)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         // Cannot approve a PR that has merge conflicts

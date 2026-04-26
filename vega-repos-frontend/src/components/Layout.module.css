@@ -449,6 +449,28 @@
   text-decoration: none;
 }
 
+.downloadNavBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #0a0c10;
+  background: var(--accent);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  text-decoration: none;
+  transition: background var(--transition-fast), transform 0.1s;
+  white-space: nowrap;
+}
+
+.downloadNavBtn:hover {
+  background: var(--accent-hover);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
 /* ── User avatar & menu ── */
 .userWrap {
   position: relative;

@@ -328,7 +328,7 @@ export default function VegaAnalyticsDashboard() {
         <div>
           <h1 className={styles.pageTitle}>VEGA Analytics</h1>
           <p className={styles.pageSubtitle}>
-            AI-powered developer intelligence · {timeRange.replace('_', ' ')}
+            Developer intelligence · {timeRange.replace('_', ' ')}
           </p>
         </div>
         <div className={styles.topBarRight}>

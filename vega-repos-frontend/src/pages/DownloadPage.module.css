@@ -1,0 +1,436 @@
+.page {
+  min-height: 100vh;
+  background: var(--bg-base);
+  color: var(--text-primary);
+}
+
+/* ── Hero ── */
+.hero {
+  background: linear-gradient(160deg, #0d1117 0%, #111827 50%, #0f172a 100%);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 64px 24px 48px;
+}
+
+.heroContent {
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: var(--accent-muted);
+  border: 1px solid rgba(88,166,255,0.2);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+.heroTitle {
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  margin: 0 0 12px;
+  line-height: 1.15;
+}
+
+.heroSub {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  margin: 0 0 28px;
+  max-width: 600px;
+}
+
+/* ── One-liner install box ── */
+.oneliner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(88,166,255,0.25);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.onelinerRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.onelinerRow .oneliner {
+  min-width: 260px;
+}
+
+.onelinerLabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.onelinerCode {
+  flex: 1;
+  font-family: 'Fira Mono', 'Consolas', monospace;
+  font-size: 0.875rem;
+  color: #e6edf3;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.codeBlockHighlight {
+  border-color: rgba(88,166,255,0.4) !important;
+  box-shadow: 0 0 0 1px rgba(88,166,255,0.1);
+}
+
+.inlineCode {
+  font-family: 'Fira Mono', 'Consolas', monospace;
+  font-size: 0.9em;
+  background: rgba(255,255,255,0.07);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--accent);
+}
+
+.versionRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.versionBadge {
+  padding: 4px 10px;
+  background: rgba(63,185,80,0.1);
+  border: 1px solid rgba(63,185,80,0.3);
+  border-radius: 20px;
+  color: #3fb950;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: monospace;
+}
+
+.versionNote {
+  font-size: 0.82rem;
+  color: var(--text-tertiary);
+}
+
+.downloadBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  background: var(--accent);
+  color: #0a0c10;
+  font-weight: 700;
+  font-size: 0.875rem;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.downloadBtn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  text-decoration: none;
+}
+
+/* ── Body ── */
+.body {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+
+/* ── Section ── */
+.section {}
+
+.sectionTitle {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  letter-spacing: -0.01em;
+}
+
+/* ── Prerequisites ── */
+.prereqGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 500px) {
+  .prereqGrid { grid-template-columns: 1fr; }
+}
+
+.prereqCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.prereqName {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.prereqSub {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.javaCheck {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.javaCheckLabel {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.javaCheckCode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-family: 'Fira Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
+/* ── Tabs ── */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 0;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: 0.855rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: -1px;
+  border-radius: 6px 6px 0 0;
+  transition: color 0.15s, background 0.15s;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.tabActive {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: rgba(88,166,255,0.05);
+}
+
+.tabContent {
+  margin-top: 0;
+}
+
+/* ── Code block ── */
+.codeBlock {
+  background: #0d1117;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 1px;
+}
+
+.codeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.codeLang {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.codePre {
+  margin: 0;
+  padding: 18px 20px;
+  overflow-x: auto;
+  font-family: 'Fira Mono', 'Consolas', monospace;
+  font-size: 0.83rem;
+  line-height: 1.7;
+  color: #c9d1d9;
+  white-space: pre;
+}
+
+.copyBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.copyBtn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* ── Quick start ── */
+
+/* ── Command grid ── */
+.cmdGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.cmdRow {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.12s;
+}
+
+.cmdRow:last-child {
+  border-bottom: none;
+}
+
+.cmdRow:hover {
+  background: var(--bg-hover);
+}
+
+.cmdCode {
+  font-family: 'Fira Mono', 'Consolas', monospace;
+  font-size: 0.82rem;
+  color: var(--accent);
+  white-space: nowrap;
+  min-width: 240px;
+}
+
+.cmdDesc {
+  font-size: 0.835rem;
+  color: var(--text-secondary);
+}
+
+/* ── Troubleshooting ── */
+.troubleList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.troubleItem {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.troubleItem:last-child {
+  border-bottom: none;
+}
+
+.troubleSummary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 14px 16px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  list-style: none;
+  transition: background 0.12s;
+  user-select: none;
+}
+
+.troubleSummary::-webkit-details-marker { display: none; }
+
+.troubleSummary:hover {
+  background: var(--bg-hover);
+}
+
+.troubleSummary code {
+  font-family: 'Fira Mono', monospace;
+  font-size: 0.85em;
+  color: var(--orange);
+}
+
+.troubleBody {
+  padding: 0 16px 16px 38px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+.troubleBody code {
+  font-family: 'Fira Mono', monospace;
+  font-size: 0.9em;
+  color: var(--accent);
+  background: rgba(88,166,255,0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.troubleBody .codeBlock {
+  margin-top: 12px;
+}

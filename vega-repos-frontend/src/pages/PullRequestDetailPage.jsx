@@ -449,7 +449,7 @@ export default function PullRequestDetailPage() {
                   disabled={aiLoading}
                   className={styles.aiBtn}
                 >
-                  {aiLoading ? 'Running AI Analysis...' : 'Run AI Analysis (Gemini)'}
+                  {aiLoading ? 'Running AI Analysis...' : 'Run AI Analysis'}
                 </button>
                 {aiError && <span className={styles.aiError}>{aiError}</span>}
               </div>
@@ -589,7 +589,7 @@ export default function PullRequestDetailPage() {
                       detail={
                         pr.hasConflicts
                           ? 'Source and target both modified these paths vs. common ancestor — merge is blocked until resolved'
-                          : 'No 3-way merge conflicts at current branch tips'
+                          : 'No merge conflicts at current branch tips'
                       }
                       warn={!!pr.hasConflicts}
                       statusText={pr.hasConflicts ? 'BLOCKED' : 'OK'}
@@ -690,7 +690,7 @@ export default function PullRequestDetailPage() {
                 {/* ── AI Findings (from PR creation) ── */}
                 {pr.aiFindings && pr.aiFindings.length > 0 && (
                   <div className={styles.reasonsBlock}>
-                    <h4>AI Review — Gemini Findings</h4>
+                    <h4>AI Review — Findings</h4>
                     {pr.aiScoreDelta > 0 && (
                       <p className={styles.treeSubtitle}>Added +{pr.aiScoreDelta} to the risk score</p>
                     )}
@@ -732,7 +732,7 @@ export default function PullRequestDetailPage() {
               {/* ── On-demand AI Analysis ── */}
               <div className={styles.insightsBlock}>
                 <h3>On-Demand AI Review</h3>
-                {aiLoading && <p className={styles.loading}>Running Gemini analysis...</p>}
+                {aiLoading && <p className={styles.loading}>Running AI analysis...</p>}
                 {!aiLoading && !aiAnalysis && !aiError && (
                   <p className={styles.empty}>
                     Trigger a fresh review at any time.{' '}
@@ -785,7 +785,7 @@ export default function PullRequestDetailPage() {
                 <div className={styles.insightsBlock}>
                   <h3>Conflicted Files</h3>
                   <p className={styles.conflictNote}>
-                    3-way merge check (source vs. target vs. common ancestor):
+                    Conflict check (source vs. target vs. common ancestor):
                   </p>
                   <ul className={styles.conflictFilesList}>
                     {pr.conflictedFiles.map((f, i) => (
@@ -873,7 +873,7 @@ export default function PullRequestDetailPage() {
                   )}
                 </div>
               )}
-              <span className={styles.vegaHint}>9 metrics + Gemini AI</span>
+              <span className={styles.vegaHint}>9 metrics + AI analysis</span>
             </div>
           )}
 

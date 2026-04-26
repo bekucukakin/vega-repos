@@ -2459,9 +2459,9 @@ public class RepoService {
             String content = readFileContent(prPath);
             if (content == null) return false;
             ObjectNode root = (ObjectNode) PR_MAPPER.readTree(content);
-            // Service-level self-action guard: reviewer cannot approve/review/reject their own PR
+            // Service-level self-action guard: non-owners cannot approve/review/reject their own PR
             String prAuthor = root.has("author") ? root.get("author").asText(null) : null;
-            if (actorUsername != null && actorUsername.equals(prAuthor)) return false;
+            if (actorUsername != null && actorUsername.equals(prAuthor) && !actorUsername.equals(username)) return false;
             String current = root.has("status") ? root.get("status").asText() : "OPEN";
             if ("MERGED".equals(current) || "REJECTED".equals(current)) return false;
             if ("APPROVED".equals(newStatus) && !"OPEN".equals(current) && !"REVIEWING".equals(current)) return false;

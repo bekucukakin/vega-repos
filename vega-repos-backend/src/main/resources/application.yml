@@ -1,5 +1,6 @@
 server:
   port: 8086
+  forward-headers-strategy: native
 
 spring:
   application:
@@ -32,6 +33,9 @@ vega:
   # Monorepo layout: vega-system/vegadocs from cwd vega-repos/vega-repos-backend → ../../vegadocs
   docs:
     path: ${VEGA_DOCS_PATH:../../vegadocs}
+  cli:
+    jar-path: ${VEGA_CLI_JAR_PATH:}
+    version: ${VEGA_CLI_VERSION:1.0.28}
 
 # Hadoop HDFS configuration
 hdfs:

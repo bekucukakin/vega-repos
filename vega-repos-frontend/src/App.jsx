@@ -11,9 +11,11 @@ import CreatePullRequestPage from './pages/CreatePullRequestPage'
 import CollaboratorRequestsPage from './pages/CollaboratorRequestsPage'
 import VegaAnalyticsDashboard from './pages/VegaAnalyticsDashboard'
 import VegaDocsPage from './pages/VegaDocsPage'
+import DownloadPage from './pages/DownloadPage'
 import ProfilePage from './pages/ProfilePage'
 import PeoplePage from './pages/PeoplePage'
 import PeopleProfilePage from './pages/PeopleProfilePage'
+import AICommitDemoPage from './pages/AICommitDemoPage'
 
 function PrivateRoute({ children }) {
   const { token } = useAuth()
@@ -31,6 +33,8 @@ function App() {
     <AuthProvider>
       <Routes>
         <Route path="/docs" element={<VegaDocsPage />} />
+        <Route path="/download" element={<DownloadPage />} />
+        <Route path="/commit-demo" element={<AICommitDemoPage />} />
         <Route path="/" element={<Layout />}>
           <Route index element={<LandingPage />} />
           <Route

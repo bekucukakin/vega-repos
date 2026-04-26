@@ -239,7 +239,7 @@ export default function CreatePullRequestPage() {
             </div>
 
             <p className={styles.footer}>
-              VEGA will perform 3-way conflict detection, 8-metric rule-based analysis, and AI review on PR creation.
+              VEGA will perform conflict detection, 8-metric rule-based analysis, and AI review on PR creation.
               {prType && ` PR type "${prType.replace(/_/g, ' ')}" will be factored into the risk score.`}
             </p>
           </form>

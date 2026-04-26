@@ -10,7 +10,7 @@ const STEPS = [
   { kind: 'cmd', text: 'vega add .' },
   { kind: 'out', text: '5 files staged for commit', dim: true },
   { kind: 'cmd', text: 'vega commit --ai' },
-  { kind: 'ai',  text: 'Analyzing diff with Gemini AI…' },
+  { kind: 'ai',  text: 'Analyzing diff…' },
   { kind: 'out', text: '✓ feat: add JWT authentication middleware', success: true },
   { kind: 'cmd', text: 'vega push origin main' },
   { kind: 'out', text: '✓ Pushed to remote · 5 objects written to HDFS', success: true },
@@ -149,17 +149,17 @@ function TerminalWidget() {
 /* ─── Stats ──────────────────────────────────────────────────────────────── */
 const STATS = [
   {
-    value: '3-Way',
-    label: 'merge algorithm',
+    value: 'Full',
+    label: 'version control system',
     gradient: 'linear-gradient(135deg,#58a6ff,#818cf8)',
     chips: [
-      { text: 'Fast-Forward', color: '#58a6ff' },
-      { text: 'Common Ancestor', color: '#79c0ff' },
+      { text: 'Branching', color: '#58a6ff' },
+      { text: 'History & Diffs', color: '#79c0ff' },
     ],
   },
   {
-    value: 'Gemini',
-    label: 'AI-powered engine',
+    value: 'AI',
+    label: 'powered engine',
     gradient: 'linear-gradient(135deg,#818cf8,#c084fc)',
     chips: [
       { text: 'Conflict Solver', color: '#c084fc' },
@@ -279,7 +279,7 @@ const WORKFLOW_STEPS = [
   {
     step: '04',
     title: 'Merge intelligently',
-    desc: 'Three-way merge with Gemini AI resolving conflicts and flagging unsafe resolutions for human review.',
+    desc: 'AI detects and resolves conflicts automatically, flagging unsafe resolutions for human review.',
     code: 'vega merge feature --ai',
     accent: '#c084fc',
   },
@@ -338,6 +338,13 @@ export default function LandingPage() {
                 </>
               )}
             </div>
+            <Link to="/commit-demo" className={styles.demoBtn}>
+              <span className={styles.demoBtnGlow} />
+              <span className={styles.demoBtnContent}>
+                <span className={styles.demoBtnMain}>Try AI Commit Assistant</span>
+                <span className={styles.demoBtnSub}>Write better commits in seconds</span>
+              </span>
+            </Link>
           </div>
 
           <TerminalWidget />
