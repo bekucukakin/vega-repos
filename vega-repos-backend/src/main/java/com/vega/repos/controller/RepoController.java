@@ -8,6 +8,7 @@ import com.vega.repos.dto.FileContentDto;
 import com.vega.repos.dto.FileTreeNodeDto;
 import com.vega.repos.dto.PrDto;
 import com.vega.repos.dto.RepoDto;
+import com.vega.repos.dto.RepoInsightsDto;
 import com.vega.repos.service.CommitInsightService;
 import com.vega.repos.service.MetricsService;
 import com.vega.repos.service.RepoAccessService;
@@ -622,5 +623,36 @@ public class RepoController {
         return commitInsightService.likeInsight(insightId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /** Repo-level insights: commit activity, contributors, PR velocity, AI adoption. */
+    @GetMapping("/{username}/{repoName}/insights")
+    public ResponseEntity<RepoInsightsDto> getRepoInsights(
+            @PathVariable String username,
+            @PathVariable String repoName,
+            @RequestHeader(value = "Authorization", required = false) String auth) {
+        String viewer = repoAccessService.resolveUsername(auth);
+        if (viewer == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        if (!repoAccessService.canAccess(viewer, username, repoName))
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        try {
+            return ResponseEntity.ok(repoService.getRepoInsights(username, repoName));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /** Returns the README file (md/adoc/txt) from the default branch, or 404 if none. */
+    @GetMapping("/{username}/{repoName}/readme")
+    public ResponseEntity<FileContentDto> getReadme(
+            @PathVariable String username,
+            @PathVariable String repoName,
+            @RequestHeader(value = "Authorization", required = false) String auth) {
+        String viewer = repoAccessService.resolveUsername(auth);
+        if (viewer == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        if (!repoAccessService.canAccess(viewer, username, repoName))
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        FileContentDto readme = repoService.getReadme(username, repoName);
+        return readme != null ? ResponseEntity.ok(readme) : ResponseEntity.notFound().build();
     }
 }

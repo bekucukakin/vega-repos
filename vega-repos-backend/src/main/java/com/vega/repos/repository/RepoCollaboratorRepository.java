@@ -27,4 +27,10 @@ public interface RepoCollaboratorRepository extends JpaRepository<RepoCollaborat
     /** Find all collaborators with a specific role in a repo. */
     List<RepoCollaborator> findByOwnerUsernameAndRepoNameAndRole(
             String ownerUsername, String repoName, String role);
+
+    /**
+     * True if {@code ownerUsername} owns at least one repo where {@code collaboratorUsername} is a collaborator.
+     * Used by metrics permission check: owners/maintainers can view collaborator metrics.
+     */
+    boolean existsByOwnerUsernameAndCollaboratorUsername(String ownerUsername, String collaboratorUsername);
 }
