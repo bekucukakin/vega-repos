@@ -25,10 +25,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
+import com.vega.repos.dto.RepoInsightsDto;
+import java.util.OptionalDouble;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 
 @Service
@@ -2497,5 +2500,105 @@ public class RepoService {
             log.debug("Decompression failed, using raw: {}", e.getMessage());
             return data;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // REPO INSIGHTS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public RepoInsightsDto getRepoInsights(String username, String repoName) {
+        List<CommitDto> commits = getCommits(username, repoName, 300);
+        List<BranchDto> branches = getBranches(username, repoName);
+        List<PrDto> prs = getPullRequests(username, repoName);
+
+        // Weekly commit activity — last 12 weeks
+        long now = System.currentTimeMillis();
+        long weekMs = 7L * 24 * 60 * 60 * 1000;
+        List<RepoInsightsDto.WeeklyActivity> weeklyActivity = new ArrayList<>();
+        for (int w = 11; w >= 0; w--) {
+            long start = now - (long) (w + 1) * weekMs;
+            long end   = now - (long) w * weekMs;
+            long count = commits.stream()
+                    .filter(c -> c.getTimestamp() != null && c.getTimestamp() >= start && c.getTimestamp() < end)
+                    .count();
+            weeklyActivity.add(RepoInsightsDto.WeeklyActivity.builder()
+                    .weekStart(start)
+                    .commitCount((int) count)
+                    .build());
+        }
+
+        // Contributors
+        Map<String, List<CommitDto>> byAuthor = commits.stream()
+                .filter(c -> c.getAuthor() != null && !c.getAuthor().isBlank())
+                .collect(Collectors.groupingBy(CommitDto::getAuthor));
+        List<RepoInsightsDto.ContributorStat> contributors = byAuthor.entrySet().stream()
+                .sorted((a, b) -> Integer.compare(b.getValue().size(), a.getValue().size()))
+                .limit(10)
+                .map(e -> {
+                    int ai = (int) e.getValue().stream().filter(c -> Boolean.TRUE.equals(c.getAiGenerated())).count();
+                    return RepoInsightsDto.ContributorStat.builder()
+                            .author(e.getKey())
+                            .commitCount(e.getValue().size())
+                            .aiCommitCount(ai)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        // AI adoption rate
+        long aiCount = commits.stream().filter(c -> Boolean.TRUE.equals(c.getAiGenerated())).count();
+        double aiRate = commits.isEmpty() ? 0.0 : Math.round((double) aiCount / commits.size() * 1000.0) / 10.0;
+
+        // PR stats
+        long openPRs = prs.stream().filter(p -> {
+            String s = String.valueOf(p.getStatus()).toUpperCase();
+            return s.equals("OPEN") || s.equals("REVIEWING");
+        }).count();
+        long mergedPRs = prs.stream().filter(p -> "MERGED".equalsIgnoreCase(p.getStatus())).count();
+        long rejectedPRs = prs.stream().filter(p -> "REJECTED".equalsIgnoreCase(p.getStatus())).count();
+
+        OptionalDouble avgReview = prs.stream()
+                .filter(p -> p.getReviewStartedAt() != null && p.getReviewCompletedAt() != null
+                        && p.getReviewCompletedAt() > p.getReviewStartedAt())
+                .mapToLong(p -> p.getReviewCompletedAt() - p.getReviewStartedAt())
+                .average();
+
+        return RepoInsightsDto.builder()
+                .totalCommits(commits.size())
+                .totalPRs(prs.size())
+                .openPRs(openPRs)
+                .mergedPRs(mergedPRs)
+                .rejectedPRs(rejectedPRs)
+                .totalBranches(branches.size())
+                .aiAdoptionRate(aiRate)
+                .avgPrReviewTimeMs(avgReview.isPresent() ? (long) avgReview.getAsDouble() : 0L)
+                .commitActivity(weeklyActivity)
+                .contributors(contributors)
+                .build();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // README
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public FileContentDto getReadme(String username, String repoName) {
+        String branch = resolveDefaultBranch(username, repoName);
+        String[] candidates = {"README.md", "README.adoc", "readme.md", "Readme.md", "README.txt"};
+        for (String name : candidates) {
+            try {
+                FileContentDto dto = getFileContent(username, repoName, branch, name);
+                if (dto != null && !dto.isBinary()) return dto;
+            } catch (Exception ignored) {
+                // try next
+            }
+        }
+        return null;
+    }
+
+    private String resolveDefaultBranch(String username, String repoName) {
+        List<BranchDto> branches = getBranches(username, repoName);
+        if (branches.isEmpty()) return "master";
+        if (branches.stream().anyMatch(b -> "master".equals(b.getName()))) return "master";
+        if (branches.stream().anyMatch(b -> "main".equals(b.getName()))) return "main";
+        return branches.get(0).getName();
     }
 }

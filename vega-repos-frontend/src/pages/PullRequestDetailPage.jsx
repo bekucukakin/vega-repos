@@ -1,20 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { API_BASE, AGENT_BASE } from '../config/api'
+import { fetchWithTimeout } from '../utils/fetchWithTimeout'
+import PrComments from '../components/PrComments'
 import styles from './PullRequestDetailPage.module.css'
 
-const API_BASE = '/api'
 const AI_TIMEOUT_MS = 45000
-
-async function fetchWithTimeout(url, options = {}, timeoutMs = AI_TIMEOUT_MS) {
-  const controller = new AbortController()
-  const id = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    return await fetch(url, { ...options, signal: controller.signal })
-  } finally {
-    clearTimeout(id)
-  }
-}
 
 async function safeJson(r) {
   const text = await r.text()
@@ -104,7 +96,7 @@ function formatDate(ts) {
 
 export default function PullRequestDetailPage() {
   const { username, repoName, prId } = useParams()
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const location = useLocation()
   const [pr, setPr] = useState(null)
   const [diff, setDiff] = useState(null)
@@ -197,6 +189,7 @@ export default function PullRequestDetailPage() {
     try {
       const r = await fetchWithTimeout(
         `${API_BASE}/repos/${username}/${repoName}/pull-requests/${prId}/ai-analysis`,
+
         { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' } }
       )
       const data = await safeJson(r)
@@ -259,7 +252,7 @@ export default function PullRequestDetailPage() {
     setChatMessages(prev => [...prev, { role: 'user', text: q }])
     setChatTyping(true)
     try {
-      const r = await fetchWithTimeout('http://localhost:8084/api/agent/pr-chat', {
+      const r = await fetchWithTimeout(`${AGENT_BASE}/pr-chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prContext: buildPrContext(), question: q, history }),
@@ -1029,6 +1022,17 @@ export default function PullRequestDetailPage() {
             </div>
           </div>
         </aside>
+      </div>
+
+      {/* ── Comments ── */}
+      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '0 1rem' }}>
+        <PrComments
+          ownerUsername={username}
+          repoName={repoName}
+          prId={prId}
+          currentUser={user?.username}
+          headers={headers}
+        />
       </div>
     </div>
   )

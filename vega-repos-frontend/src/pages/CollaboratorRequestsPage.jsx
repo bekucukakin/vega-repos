@@ -1,18 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
+import { API_BASE } from '../config/api'
 import styles from './CollaboratorRequestsPage.module.css'
-
-const API_BASE = '/api'
 
 export default function CollaboratorRequestsPage() {
   const { user, getAuthHeader } = useAuth()
+  const toast = useToast()
   const [requests, setRequests] = useState([])
   const [invites, setInvites] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const load = () => {
+  const load = useCallback(() => {
     setError('')
     Promise.all([
       fetch(`${API_BASE}/collaborator-requests`, { headers: getAuthHeader() }),
@@ -28,41 +29,41 @@ export default function CollaboratorRequestsPage() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }
+  }, [getAuthHeader])
 
   useEffect(() => {
     if (!user?.username) return
     load()
-  }, [user?.username, getAuthHeader])
+  }, [user?.username, load])
 
-  const handleRequest = (url, method, errorMsg) =>
+  const handleRequest = (url, method, successMsg, errorMsg) =>
     fetch(url, { method, headers: getAuthHeader() })
       .then((r) => {
-        if (r.ok) return load()
-        if (r.status === 401) return setError('Unauthorized — please log in again.')
-        if (r.status === 403) return setError('Forbidden — you do not have permission for this action.')
-        if (r.status === 404) return setError('Not found — the request may have already been processed.')
-        return setError(`${errorMsg} (${r.status})`)
+        if (r.ok) { toast.success(successMsg); return load() }
+        if (r.status === 401) return toast.error('Unauthorized — please log in again.')
+        if (r.status === 403) return toast.error('Forbidden — you do not have permission for this action.')
+        if (r.status === 404) return toast.warn('Not found — the request may have already been processed.')
+        return toast.error(`${errorMsg} (${r.status})`)
       })
-      .catch((e) => setError(e.message || errorMsg))
+      .catch((e) => toast.error(e.message || errorMsg))
 
   const handleApprove = (req) =>
     handleRequest(
       `${API_BASE}/repos/${req.ownerUsername}/${req.repoName}/collaborators/requests/${req.id}/approve`,
-      'POST', 'Failed to approve request'
+      'POST', 'Access request approved', 'Failed to approve request'
     )
 
   const handleReject = (req) =>
     handleRequest(
       `${API_BASE}/repos/${req.ownerUsername}/${req.repoName}/collaborators/requests/${req.id}/reject`,
-      'POST', 'Failed to reject request'
+      'POST', 'Access request rejected', 'Failed to reject request'
     )
 
   const handleAcceptInvite = (inv) =>
-    handleRequest(`${API_BASE}/collaborator-invites/${inv.id}/accept`, 'POST', 'Failed to accept invite')
+    handleRequest(`${API_BASE}/collaborator-invites/${inv.id}/accept`, 'POST', 'Invite accepted!', 'Failed to accept invite')
 
   const handleRejectInvite = (inv) =>
-    handleRequest(`${API_BASE}/collaborator-invites/${inv.id}/reject`, 'POST', 'Failed to decline invite')
+    handleRequest(`${API_BASE}/collaborator-invites/${inv.id}/reject`, 'POST', 'Invite declined', 'Failed to decline invite')
 
   if (loading) return <div className={styles.loading}>Loading...</div>
 

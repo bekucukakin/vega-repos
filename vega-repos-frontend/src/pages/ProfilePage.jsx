@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import styles from './ProfilePage.module.css'
+import { API_BASE } from '../config/api'
 
-const API_BASE = '/api'
 
 export default function ProfilePage() {
   const { user, getAuthHeader } = useAuth()

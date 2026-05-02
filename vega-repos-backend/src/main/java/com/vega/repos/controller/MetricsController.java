@@ -39,6 +39,23 @@ public class MetricsController {
         return ResponseEntity.ok(metricsService.getGlobalMetrics());
     }
 
+    /**
+     * Get metrics for a specific user.
+     * Permission: viewer can see their own metrics unconditionally.
+     * Viewer can see another user's metrics only if the viewer owns at least one repo
+     * where the target is a collaborator (owner/maintainer relationship).
+     */
+    @GetMapping("/user/{username}")
+    public ResponseEntity<VegaMetricsDto> getUserMetrics(
+            @PathVariable String username,
+            @RequestHeader(value = "Authorization", required = false) String auth) {
+        String viewer = repoAccessService.resolveUsername(auth);
+        if (viewer == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        if (!repoAccessService.canViewUserMetrics(viewer, username))
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        return ResponseEntity.ok(metricsService.getMetricsForUser(username));
+    }
+
     /** Sync commit metrics from CLI. Body: { totalGenerated, acceptedFirst, acceptedAfterRegenerate, rejected, totalRegenerations, totalTimeToAcceptMs } */
     @PostMapping("/commit/sync")
     public ResponseEntity<Void> syncCommitMetrics(
@@ -53,6 +70,20 @@ public class MetricsController {
         long tr = body.containsKey("totalRegenerations") ? body.get("totalRegenerations").longValue() : 0;
         long tta = body.containsKey("totalTimeToAcceptMs") ? body.get("totalTimeToAcceptMs").longValue() : 0;
         metricsService.upsertCommitMetrics(user, tg, af, aar, rej, tr, tta);
+        return ResponseEntity.ok().build();
+    }
+
+    /** Sync PR review metrics from CLI. Body: { totalPrsAnalyzed, avgReviewTimeWithFeatureMs, avgReviewTimeWithoutFeatureMs } */
+    @PostMapping("/pr/sync")
+    public ResponseEntity<Void> syncPrMetrics(
+            @RequestHeader(value = "Authorization", required = false) String auth,
+            @RequestBody Map<String, Number> body) {
+        String user = repoAccessService.resolveUsername(auth);
+        if (user == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        long total = body.containsKey("totalPrsAnalyzed") ? body.get("totalPrsAnalyzed").longValue() : 0;
+        long avgWith = body.containsKey("avgReviewTimeWithFeatureMs") ? body.get("avgReviewTimeWithFeatureMs").longValue() : 0;
+        long avgWithout = body.containsKey("avgReviewTimeWithoutFeatureMs") ? body.get("avgReviewTimeWithoutFeatureMs").longValue() : 0;
+        metricsService.upsertPrReviewMetrics(user, total, avgWith, avgWithout);
         return ResponseEntity.ok().build();
     }
 }

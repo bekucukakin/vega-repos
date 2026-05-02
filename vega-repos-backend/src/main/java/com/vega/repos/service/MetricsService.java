@@ -364,6 +364,36 @@ public class MetricsService {
         globalCacheTimestamp.set(0L); // invalidate global cache
     }
 
+    /**
+     * Sync PR review metrics from CLI.
+     * Stores avg review times sent by CLI; preserves existing approve/reject counts from DB.
+     * totalPrsAnalyzed and time totals are computed from the averages × existing counts.
+     */
+    public void upsertPrReviewMetrics(String username, long totalPrsAnalyzed,
+                                      long avgReviewTimeWithFeatureMs, long avgReviewTimeWithoutFeatureMs) {
+        UserPrMetrics m = prMetricsRepo.findByUsernameIgnoreCase(username)
+                .orElseGet(() -> {
+                    var newM = UserPrMetrics.builder().username(username).build();
+                    return prMetricsRepo.save(newM);
+                });
+
+        long withF = m.getPrsWithFeatureCount() != null ? m.getPrsWithFeatureCount() : 0;
+        long withoutF = m.getPrsWithoutFeatureCount() != null ? m.getPrsWithoutFeatureCount() : 0;
+
+        // If CLI sends non-zero totals but DB has no split, distribute evenly
+        if (withF == 0 && withoutF == 0 && totalPrsAnalyzed > 0) {
+            withF = totalPrsAnalyzed;
+        }
+
+        m.setTotalPrsAnalyzed(totalPrsAnalyzed);
+        m.setPrsWithFeatureCount(withF);
+        m.setTotalReviewTimeWithFeatureMs(avgReviewTimeWithFeatureMs * Math.max(withF, 1));
+        m.setPrsWithoutFeatureCount(withoutF);
+        m.setTotalReviewTimeWithoutFeatureMs(avgReviewTimeWithoutFeatureMs * Math.max(withoutF, 1));
+        prMetricsRepo.save(m);
+        globalCacheTimestamp.set(0L);
+    }
+
     /** Record or update commit metrics (for sync from CLI). */
     public void upsertCommitMetrics(String username, long totalGenerated, long acceptedFirst,
                                     long acceptedAfterRegenerate, long rejected, long totalRegenerations, long totalTimeToAcceptMs) {

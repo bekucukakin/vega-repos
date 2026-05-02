@@ -202,4 +202,18 @@ public class RepoAccessService {
     public boolean isOwner(String currentUser, String ownerUsername) {
         return currentUser != null && currentUser.equals(ownerUsername);
     }
+
+    /**
+     * Can {@code viewer} see metrics for {@code targetUsername}?
+     * Rules:
+     *   1. A user can always view their own metrics.
+     *   2. A user can view another's metrics if they own at least one repo
+     *      where that user is a collaborator (i.e., they are the repo owner/maintainer
+     *      who has granted the target access).
+     */
+    public boolean canViewUserMetrics(String viewer, String targetUsername) {
+        if (viewer == null || targetUsername == null) return false;
+        if (viewer.equalsIgnoreCase(targetUsername)) return true;
+        return collaboratorRepository.existsByOwnerUsernameAndCollaboratorUsername(viewer, targetUsername);
+    }
 }

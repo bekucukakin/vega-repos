@@ -1,0 +1,195 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--color-border, #2a2a3e);
+}
+
+.title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text, #e2e2f0);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.count {
+  font-size: 0.75rem;
+  background: var(--color-surface, #1a1a2e);
+  border: 1px solid var(--color-border, #2a2a3e);
+  border-radius: 99px;
+  padding: 0.1em 0.55em;
+  color: var(--color-text-muted, #888);
+  font-weight: 500;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.commentItem {
+  background: var(--color-surface, #1a1a2e);
+  border: 1px solid var(--color-border, #2a2a3e);
+  border-radius: 0.5rem;
+  padding: 0.875rem 1rem;
+}
+
+.commentHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.commentAuthor {
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--color-text, #e2e2f0);
+}
+
+.commentTime {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #888);
+}
+
+.commentFile {
+  font-size: 0.72rem;
+  background: var(--color-bg, #12121e);
+  border: 1px solid var(--color-border, #2a2a3e);
+  border-radius: 4px;
+  padding: 0.1em 0.45em;
+  font-family: 'Fira Code', monospace;
+  color: var(--vega-accent, #6366f1);
+}
+
+.commentActions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.replyBtn,
+.deleteBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+.replyBtn {
+  color: var(--vega-accent, #6366f1);
+}
+
+.replyBtn:hover { background: var(--vega-accent, #6366f1)22; }
+
+.deleteBtn {
+  color: #f87171;
+}
+
+.deleteBtn:hover { background: #f8717122; }
+
+.commentBody {
+  font-size: 0.88rem;
+  color: var(--color-text, #e2e2f0);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.replies {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ── Form ── */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.replyBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--vega-accent, #6366f1)18;
+  border: 1px solid var(--vega-accent, #6366f1)55;
+  border-radius: 4px;
+  padding: 0.35em 0.75em;
+  font-size: 0.78rem;
+  color: var(--vega-accent, #6366f1);
+}
+
+.cancelReply {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--vega-accent, #6366f1);
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.textarea {
+  width: 100%;
+  background: var(--color-surface, #1a1a2e);
+  border: 1px solid var(--color-border, #2a2a3e);
+  border-radius: 0.5rem;
+  color: var(--color-text, #e2e2f0);
+  font-size: 0.88rem;
+  padding: 0.625rem 0.875rem;
+  resize: vertical;
+  font-family: inherit;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--vega-accent, #6366f1);
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.submitBtn {
+  background: var(--vega-accent, #6366f1);
+  color: #fff;
+  border: none;
+  border-radius: 0.4rem;
+  padding: 0.45em 1.1em;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.submitBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.submitBtn:not(:disabled):hover { opacity: 0.88; }
+
+.loading,
+.empty {
+  font-size: 0.88rem;
+  color: var(--color-text-muted, #888);
+  margin: 0;
+}
+
+.error {
+  font-size: 0.82rem;
+  color: #f87171;
+  margin: 0;
+}

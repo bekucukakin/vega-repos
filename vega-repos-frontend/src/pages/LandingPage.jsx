@@ -315,12 +315,20 @@ export default function LandingPage() {
             </p>
             <div className={styles.heroCtas}>
               {token ? (
-                <Link to="/repos" className={styles.btnPrimary}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                  </svg>
-                  Start Managing Repos
-                </Link>
+                <>
+                  <Link to="/repos" className={styles.btnPrimary}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                    Start Managing Repos
+                  </Link>
+                  <Link to="/commit-demo" className={styles.demoBtn}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                    </svg>
+                    Try AI Commit
+                  </Link>
+                </>
               ) : (
                 <>
                   <Link to="/login" className={styles.btnPrimary}>
@@ -335,16 +343,15 @@ export default function LandingPage() {
                     </svg>
                     Read the docs
                   </Link>
+                  <Link to="/commit-demo" className={styles.demoBtn}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                    </svg>
+                    Try AI Commit
+                  </Link>
                 </>
               )}
             </div>
-            <Link to="/commit-demo" className={styles.demoBtn}>
-              <span className={styles.demoBtnGlow} />
-              <span className={styles.demoBtnContent}>
-                <span className={styles.demoBtnMain}>Try AI Commit Assistant</span>
-                <span className={styles.demoBtnSub}>Write better commits in seconds</span>
-              </span>
-            </Link>
           </div>
 
           <TerminalWidget />

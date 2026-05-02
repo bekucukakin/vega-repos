@@ -3,8 +3,8 @@ import { useSearchParams, Link } from 'react-router-dom'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark-dimmed.min.css'
 import styles from './VegaDocsPage.module.css'
+import { API_BASE } from '../config/api'
 
-const API_BASE = '/api'
 const DEFAULT_LANG = 'en'
 
 const DOC_ICONS = {
