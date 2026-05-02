@@ -5,8 +5,8 @@ import { fetchWithTimeout } from '../utils/fetchWithTimeout'
 import { parseApiError } from '../utils/parseApiError'
 import VegaBrandMark from '../components/VegaBrandMark'
 import styles from './RegisterPage.module.css'
+import { API_BASE } from '../config/api'
 
-const API_BASE = '/api'
 
 // Client-side validations (same rules as CLI/backend)
 const USERNAME_MIN = 3

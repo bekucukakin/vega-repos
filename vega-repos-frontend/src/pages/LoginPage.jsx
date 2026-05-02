@@ -5,8 +5,8 @@ import { fetchWithTimeout } from '../utils/fetchWithTimeout'
 import { parseApiError } from '../utils/parseApiError'
 import VegaBrandMark from '../components/VegaBrandMark'
 import styles from './LoginPage.module.css'
+import { API_BASE } from '../config/api'
 
-const API_BASE = '/api'
 
 export default function LoginPage() {
   const [usernameOrEmail, setUsernameOrEmail] = useState('')

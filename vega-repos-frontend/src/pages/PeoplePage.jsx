@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import styles from './PeoplePage.module.css'
+import { API_BASE } from '../config/api'
 
-const API_BASE = '/api'
 
 export default function PeoplePage() {
   const { getAuthHeader } = useAuth()

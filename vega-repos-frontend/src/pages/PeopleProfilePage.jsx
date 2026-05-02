@@ -4,8 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { fetchWithTimeout } from '../utils/fetchWithTimeout'
 import { parseApiError } from '../utils/parseApiError'
 import styles from './PeopleProfilePage.module.css'
+import { API_BASE } from '../config/api'
 
-const API_BASE = '/api'
 
 function RepoRow({ repo }) {
   return (
