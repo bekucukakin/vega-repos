@@ -894,46 +894,25 @@
 
 /* ── AI Commit Demo Button ───────────────────────────────────────────────── */
 .demoBtn {
-  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 12px;
-  padding: 12px 20px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(88, 166, 255, 0.25);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  overflow: hidden;
-  text-align: left;
-  width: fit-content;
+  gap: var(--space-2);
+  padding: 10px 22px;
+  background: transparent;
+  border: 1px solid rgba(129, 140, 248, 0.35);
+  color: #818cf8 !important;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: 0.9rem;
+  text-decoration: none;
+  transition: all var(--transition-base);
 }
+
 .demoBtn:hover {
-  background: rgba(88, 166, 255, 0.07);
-  border-color: rgba(88, 166, 255, 0.45);
+  border-color: #818cf8;
+  color: #818cf8 !important;
+  background: rgba(129, 140, 248, 0.08);
+  box-shadow: 0 0 16px rgba(129, 140, 248, 0.14);
   transform: translateY(-1px);
-  box-shadow: 0 4px 24px rgba(88, 166, 255, 0.15);
-}
-.demoBtnGlow {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at 20% 50%, rgba(88,166,255,0.08) 0%, transparent 65%);
-  pointer-events: none;
-}
-.demoBtnContent {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.demoBtnMain {
-  font-size: 14px;
-  font-weight: 700;
-  color: #e6edf3;
-  line-height: 1;
-}
-.demoBtnSub {
-  font-size: 11px;
-  color: #6b7280;
-  line-height: 1;
+  text-decoration: none;
 }
