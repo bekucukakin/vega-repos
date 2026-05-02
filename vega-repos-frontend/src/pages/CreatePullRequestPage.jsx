@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import styles from './CreatePullRequestPage.module.css'
+import { API_BASE } from '../config/api'
 
-const API_BASE = '/api'
 
 async function safeJson(r) {
   const text = await r.text()
