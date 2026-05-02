@@ -2,8 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import styles from './Layout.module.css'
+import { API_BASE } from '../config/api'
 
-const API_BASE = '/api'
 
 const VegaLogo = () => (
   <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -72,12 +72,9 @@ export default function Layout() {
   const [searching, setSearching] = useState(false)
   const [searchFocused, setSearchFocused] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [metricsMenuOpen, setMetricsMenuOpen] = useState(false)
-
   const searchTimer = useRef(null)
   const searchWrapRef = useRef(null)
   const userMenuRef = useRef(null)
-  const metricsMenuRef = useRef(null)
 
   const navItems = [
     { path: '/', label: 'Dashboard' },
@@ -130,14 +127,13 @@ export default function Layout() {
     const handler = (e) => {
       if (searchWrapRef.current && !searchWrapRef.current.contains(e.target)) setShowDropdown(false)
       if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setUserMenuOpen(false)
-      if (metricsMenuRef.current && !metricsMenuRef.current.contains(e.target)) setMetricsMenuOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
   useEffect(() => {
-    setShowDropdown(false); setQuery(''); setUserMenuOpen(false); setMetricsMenuOpen(false)
+    setShowDropdown(false); setQuery(''); setUserMenuOpen(false)
   }, [location.pathname])
 
   const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : '??'
@@ -175,32 +171,15 @@ export default function Layout() {
                 )
               })}
 
-              {/* Metrics dropdown */}
-              <div className={styles.dropdownWrap} ref={metricsMenuRef}>
-                <button
-                  type="button"
-                  className={`${styles.navLink} ${styles.navLinkMetrics} ${isMetricsActive ? styles.navLinkActive : ''}`}
-                  onClick={() => setMetricsMenuOpen((v) => !v)}
-                >
-                  <span className={`${styles.navIcon} ${styles.navIconMetrics}`}>{NAV_ICONS['/metrics']}</span>
-                  Metrics
-                  <span className={styles.metricsBadge} />
-                  <svg className={`${styles.chevron} ${metricsMenuOpen ? styles.chevronUp : ''}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </button>
-                {metricsMenuOpen && (
-                  <div className={styles.dropdownMenu}>
-                    <Link to="/metrics/analytics" className={styles.dropdownItem}
-                      onClick={() => setMetricsMenuOpen(false)}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
-                      </svg>
-                      Analytics Dashboard
-                    </Link>
-                  </div>
-                )}
-              </div>
+              {/* Metrics link */}
+              <Link
+                to="/metrics"
+                className={`${styles.navLink} ${styles.navLinkMetrics} ${isMetricsActive ? styles.navLinkActive : ''}`}
+              >
+                <span className={`${styles.navIcon} ${styles.navIconMetrics}`}>{NAV_ICONS['/metrics']}</span>
+                Metrics
+                <span className={styles.metricsBadge} />
+              </Link>
             </nav>
 
             {/* ── Right side ── */}
